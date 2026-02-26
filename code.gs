@@ -149,69 +149,9 @@ const CONFIG = {
 // ============================================================================
 // MENU SETUP
 // ============================================================================
+// NOTE: The onOpen() function is defined below in the "UPDATED onOpen" section
+// (after the patch system) which includes Project Notes and all enhanced menus.
 
-/**
- * Creates the custom menu when the spreadsheet opens
- */
-function onOpen() {
-  const ui = SpreadsheetApp.getUi();
-  
-  // Build the main menu
-  const mainMenu = ui.createMenu('🎛️ CCAT System')
-    .addItem('🔄 New Sprint (Rollover & Push)', 'newSprintRollover')
-    .addItem('🔁 Sync All Satellites', 'syncAllSatellites')
-    .addItem('🎯 Sync OKR Satellite Only', 'syncOKRSatelliteOnly')
-    .addSeparator()
-    .addItem('🎯 Update OKR Timeline', 'updateOKRTimeline')
-    .addItem('📋 Generate RACI Task List', 'generateRACITaskList')
-    .addSeparator()
-    .addSubMenu(ui.createMenu('📊 Bi-Weekly Update')
-      .addItem('📊 Generate Summary Sheet', 'generateBiWeeklySummary')
-      .addItem('📧 Send Pre-Read Email', 'sendStatusSummary'))
-    .addSeparator()
- .addSubMenu(ui.createMenu('🤝 Advisory Network')
-      .addItem('👀 View Contact Database', 'navToAdvisoryNetwork')
-      .addItem('➕ Add New Contact', 'showEnhancedAddContactDialog')
-      .addItem('📞 Log Contact Call', 'showContactDictationDialog')
-      .addItem('📋 View Call Reports', 'showCallReportsList')
-      .addItem('💬 View Conversation Log', 'navToConversationLog')
-      .addItem('👁️ View Contact Details', 'showContactDetailPopup')
-      .addItem('📊 View Network Dashboard', 'navToNetworkDashboard')
-      .addSeparator()
-      .addItem('🔁 Sync Advancement Submissions', 'syncAdvancementInput')
-      .addItem('📧 Open Advancement Satellite', 'openSatelliteAdvancement')
-      .addSeparator()
-      .addItem('📁 Open Call Reports Folder', 'openCallReportsFolder')
-      .addSeparator()
-.addItem('📞 Log Contact Call (Enhanced)', 'showContactDictationDialog')
-.addItem('⚙️ Setup Advancement Satellite v2', 'setupAdvancementSatelliteV2')
-.addItem('🔄 Sync to Advancement', 'syncToAdvancementSatellite_')
-     .addItem('⚙️ Setup Contact Reports', 'setupContactReportSystem'))
-    .addSubMenu(ui.createMenu('✅ OKR Change Approval')
-      .addItem('📋 View Pending Changes', 'viewPendingOKRChanges')
-      .addItem('✅ Approve All & Sync', 'approveAllOKRChanges')
-      .addItem('✅ Approve Selected Changes', 'approveSelectedOKRChanges')
-      .addItem('❌ Reject Selected Changes', 'rejectSelectedOKRChanges')
-      .addItem('🗑️ Clear Change Log', 'clearOKRChangeLog'))
-    .addSeparator()
-    .addSubMenu(ui.createMenu('🗄️ Archives')
-      .addItem('📅 View Archived Sprints', 'viewArchivedSprints')
-      .addItem('📋 View Check-In History', 'viewCheckInHistory')
-      .addItem('📊 Generate Archive Report', 'generateArchiveReport'))
-    .addSeparator()
-    .addItem('🗺️ View System Map', 'showSystemMap')
-    .addSeparator()
-    .addSubMenu(ui.createMenu('⚙️ Setup')
-      .addItem('🚀 Initial Setup (Create Satellites)', 'initialSetup')
-      .addItem('🔧 Fix Formula References', 'fixFormulaReferences')
-      .addItem('📝 Update Config Email', 'promptForEmail')
-      .addItem('📝 Setup OKR Change Tracking', 'setupOKRChangeTracking'))
-    .addToUi();
-  
-  // Build navigation menu for internal sheets
-  buildNavigationMenus_(ui);
-}
- 
 
 
 
@@ -9351,7 +9291,6 @@ function onSelectionChange(e) {
   }
 }
 /**
- /**
  * Creates Advancement Check-In - FULLY SELF-CONTAINED
  */
 function addAdvancementCheckIn() {
