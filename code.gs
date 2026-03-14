@@ -95,7 +95,8 @@ const CONFIG = {
     category: ['Event', 'Update', 'Comms', 'Key Milestone'],
     actionStatus: ['Not Started', 'In Progress', 'Complete', 'Blocked', 'Pending', 'Carried Over'],
     sprintDueDate: ['This Sprint', 'Next Sprint', '2 Sprints Out', '3 Sprints Out', '4 Sprints Out', '5 Sprints Out'],
-    raciFunctions: ["President's Office", 'Advancement', 'Production', 'Curator', 'ED', 'CHANEL', 'Provost', 'BB6', 'Research']
+    raciFunctions: ["President's Office", 'Advancement', 'Production', 'Curator', 'ED', 'CHANEL', 'Provost', 'BB6', 'Research'],
+    raciPeople: ['Katie', 'Andreas', 'Kari', 'Lumi', 'Richard', 'MC', 'Kiara', 'Ravi', 'Irene', 'Yana']
   },
 
   // Maps person names (lowercase) to their RACI function/department.
@@ -1080,12 +1081,13 @@ function addCheckInDropdowns_(sheet, sectionRows) {
   sheet.getRange(actionsDataStart, 3, actionsDataEnd - actionsDataStart + 1, 1).setDataValidation(dueDateRule);
 
   // RACI dropdowns (Columns B-E: Responsible, Accountable, Consulted, Informed)
+  // Uses person names; multi-select is handled by onEdit append logic
   if (sectionRows && sectionRows.raciHeaderRow && sectionRows.raciHeaderRow > 0) {
     const raciDataStart = sectionRows.raciHeaderRow + 1;
     const raciDataEnd = (sectionRows.parkingSectionRow || raciDataStart + 5) - 1;
     const raciRule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(CONFIG.dropdownOptions.raciFunctions, true)
-      .setAllowInvalid(true)  // allows custom names not in the list
+      .requireValueInList(CONFIG.dropdownOptions.raciPeople, true)
+      .setAllowInvalid(true)  // allows comma-separated multi-select values
       .build();
     for (let col = 2; col <= 5; col++) {
       sheet.getRange(raciDataStart, col, raciDataEnd - raciDataStart + 1, 1).setDataValidation(raciRule);
@@ -1258,57 +1260,71 @@ function organizeRACIByFunction_(raciRows) {
 
 
 /**
- * onEdit trigger: resolves sprint-relative due dates to the 2nd Thursday of that sprint.
- * When a user selects "This Sprint", "Next Sprint", "+2 Sprints", etc. in an Action Items
- * Due Date cell, it auto-converts to the actual date (2nd Thursday of that sprint).
+ * onEdit trigger: handles two behaviors:
+ * 1. Sprint-relative due dates → converts to actual date (2nd Thursday)
+ * 2. RACI multi-select → appends new dropdown pick to existing comma-separated value
  */
 function onEdit(e) {
   if (!e || !e.range) return;
   const sheet = e.range.getSheet();
   const val = e.value;
+  if (!val) return;
 
-  // Only act on sprint-relative dropdown values
-  if (!val || CONFIG.dropdownOptions.sprintDueDate.indexOf(val) === -1) return;
+  const col = e.range.getColumn();
 
-  // Check if this is a Check-In sheet (satellite or master sync sheet) with Action Items
-  // Find the "Action Items" section to confirm this cell is in the due date column (C)
-  if (e.range.getColumn() !== 3) return; // Due Date is always column C
+  // --- Sprint-relative due date conversion (column C, Action Items) ---
+  if (col === 3 && CONFIG.dropdownOptions.sprintDueDate.indexOf(val) !== -1) {
+    const sprintOffsetMap = {
+      'This Sprint': 0, 'Next Sprint': 1, '2 Sprints Out': 2,
+      '3 Sprints Out': 3, '4 Sprints Out': 4, '5 Sprints Out': 5
+    };
+    const offset = sprintOffsetMap[val];
+    if (offset === undefined) return;
 
-  // Determine sprint offset from selection
-  const sprintOffsetMap = {
-    'This Sprint': 0,
-    'Next Sprint': 1,
-    '2 Sprints Out': 2,
-    '3 Sprints Out': 3,
-    '4 Sprints Out': 4,
-    '5 Sprints Out': 5
-  };
-  const offset = sprintOffsetMap[val];
-  if (offset === undefined) return;
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay() + 1);
+    const targetSprintStart = new Date(startOfWeek);
+    targetSprintStart.setDate(startOfWeek.getDate() + (offset * 14));
+    const secondThursday = new Date(targetSprintStart);
+    secondThursday.setDate(targetSprintStart.getDate() + 10);
 
-  // Get current sprint start date (Monday of current sprint week)
-  const today = new Date();
-  const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
+    e.range.setValue(secondThursday);
+    e.range.setNumberFormat('MMM d, yyyy');
+    return;
+  }
 
-  // Calculate the target sprint's start Monday
-  const targetSprintStart = new Date(startOfWeek);
-  targetSprintStart.setDate(startOfWeek.getDate() + (offset * 14));
+  // --- RACI multi-select append (columns B-E, person name dropdown) ---
+  if (col >= 2 && col <= 5 && CONFIG.dropdownOptions.raciPeople.indexOf(val) !== -1) {
+    // Check if this cell is in a RACI section by scanning for the RACI header above
+    const bounds = getSectionBoundaries_(sheet);
+    if (!bounds.raci) return;
+    const row = e.range.getRow();
+    if (row < bounds.raci.start || row > bounds.raci.end) return;
 
-  // 2nd Thursday = Thursday of the 2nd week = sprint start + 10 days
-  // Monday(+0) Tue(+1) Wed(+2) Thu(+3) Fri(+4) Sat(+5) Sun(+6)
-  // Mon(+7) Tue(+8) Wed(+9) Thu(+10) Fri(+11) Sat(+12) Sun(+13)
-  const secondThursday = new Date(targetSprintStart);
-  secondThursday.setDate(targetSprintStart.getDate() + 10);
-
-  e.range.setValue(secondThursday);
-  e.range.setNumberFormat('MMM d, yyyy');
+    // Append to existing value instead of replacing
+    const oldVal = e.oldValue || '';
+    if (oldVal) {
+      // Check if the name is already in the list
+      const existing = oldVal.split(',').map(s => s.trim());
+      if (existing.indexOf(val) === -1) {
+        e.range.setValue(oldVal + ', ' + val);
+      } else {
+        // Name already present — restore old value (toggle off not supported)
+        e.range.setValue(oldVal);
+      }
+    }
+    // If oldVal is empty, the single selection stands as-is
+  }
 }
 
 
 /**
- * Scans all satellite spreadsheets for unconverted sprint-relative due date
- * values (e.g. "This Sprint", "Next Sprint") and converts them to actual dates.
+ * Polls all satellite spreadsheets and handles:
+ * 1. Sprint-relative due dates → converts to actual dates (2nd Thursday)
+ * 2. RACI multi-select → detects when a dropdown pick replaced a multi-value
+ *    and restores the append behavior by tracking previous RACI snapshots.
+ *
  * This is needed because the Hub's onEdit trigger cannot fire on satellite edits.
  * Run this on a short time-based trigger (every 1–5 minutes).
  */
@@ -1317,11 +1333,12 @@ function convertSprintDatesInSatellites() {
   const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
   if (!configSheet) return;
 
-  const sprintOptions = CONFIG.dropdownOptions.sprintDueDate;
   const sprintOffsetMap = {
     'This Sprint': 0, 'Next Sprint': 1, '2 Sprints Out': 2,
     '3 Sprints Out': 3, '4 Sprints Out': 4, '5 Sprints Out': 5
   };
+  const peopleList = CONFIG.dropdownOptions.raciPeople;
+  const props = PropertiesService.getScriptProperties();
 
   const data = configSheet.getDataRange().getValues();
 
@@ -1335,38 +1352,92 @@ function convertSprintDatesInSatellites() {
       if (!sheet) continue;
 
       const bounds = getSectionBoundaries_(sheet);
-      if (!bounds.actions) continue;
 
-      const startRow = bounds.actions.start;
-      const endRow = bounds.actions.end;
-      if (endRow < startRow) continue;
-
-      // Read column C (Due Date) for the Action Items section
-      const range = sheet.getRange(startRow, 3, endRow - startRow + 1, 1);
-      const values = range.getValues();
-
-      for (let r = 0; r < values.length; r++) {
-        const val = String(values[r][0]).trim();
-        if (sprintOffsetMap[val] !== undefined) {
-          const offset = sprintOffsetMap[val];
-
-          const today = new Date();
-          const startOfWeek = new Date(today);
-          startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
-
-          const targetSprintStart = new Date(startOfWeek);
-          targetSprintStart.setDate(startOfWeek.getDate() + (offset * 14));
-
-          const secondThursday = new Date(targetSprintStart);
-          secondThursday.setDate(targetSprintStart.getDate() + 10);
-
-          const cell = sheet.getRange(startRow + r, 3);
-          cell.setValue(secondThursday);
-          cell.setNumberFormat('MMM d, yyyy');
+      // --- 1. Sprint due date conversion ---
+      if (bounds.actions) {
+        const startRow = bounds.actions.start;
+        const endRow = bounds.actions.end;
+        if (endRow >= startRow) {
+          const range = sheet.getRange(startRow, 3, endRow - startRow + 1, 1);
+          const values = range.getValues();
+          for (let r = 0; r < values.length; r++) {
+            const val = String(values[r][0]).trim();
+            if (sprintOffsetMap[val] !== undefined) {
+              const offset = sprintOffsetMap[val];
+              const today = new Date();
+              const startOfWeek = new Date(today);
+              startOfWeek.setDate(today.getDate() - today.getDay() + 1);
+              const targetSprintStart = new Date(startOfWeek);
+              targetSprintStart.setDate(startOfWeek.getDate() + (offset * 14));
+              const secondThursday = new Date(targetSprintStart);
+              secondThursday.setDate(targetSprintStart.getDate() + 10);
+              const cell = sheet.getRange(startRow + r, 3);
+              cell.setValue(secondThursday);
+              cell.setNumberFormat('MMM d, yyyy');
+            }
+          }
         }
       }
+
+      // --- 2. RACI multi-select append ---
+      if (bounds.raci) {
+        const rStart = bounds.raci.start;
+        const rEnd = bounds.raci.end;
+        if (rEnd >= rStart) {
+          const numRows = rEnd - rStart + 1;
+          // Read RACI columns B-E (cols 2-5)
+          const raciRange = sheet.getRange(rStart, 2, numRows, 4);
+          const raciValues = raciRange.getValues();
+
+          // Load previous snapshot for this satellite
+          const snapshotKey = 'raci_snapshot_' + satelliteId;
+          let prevSnapshot = null;
+          try {
+            const stored = props.getProperty(snapshotKey);
+            if (stored) prevSnapshot = JSON.parse(stored);
+          } catch (_) { /* ignore parse errors */ }
+
+          let changed = false;
+
+          if (prevSnapshot && prevSnapshot.length === raciValues.length) {
+            for (let r = 0; r < raciValues.length; r++) {
+              for (let c = 0; c < 4; c++) {
+                const curr = String(raciValues[r][c]).trim();
+                const prev = String(prevSnapshot[r][c]).trim();
+
+                if (curr === prev) continue;
+
+                // If the current value is a single known person name AND the
+                // previous value contained content (was not empty), the dropdown
+                // likely replaced a multi-value. Append instead.
+                if (prev && prev !== curr && peopleList.indexOf(curr) !== -1) {
+                  const existingNames = prev.split(',').map(s => s.trim());
+                  if (existingNames.indexOf(curr) === -1) {
+                    // Append
+                    const merged = prev + ', ' + curr;
+                    raciValues[r][c] = merged;
+                    changed = true;
+                  } else {
+                    // Already present — restore previous
+                    raciValues[r][c] = prev;
+                    changed = true;
+                  }
+                }
+              }
+            }
+          }
+
+          if (changed) {
+            raciRange.setValues(raciValues);
+          }
+
+          // Save current state as snapshot for next poll
+          props.setProperty(snapshotKey, JSON.stringify(raciValues));
+        }
+      }
+
     } catch (err) {
-      console.error('Sprint date conversion failed for satellite ' + data[i][0] + ': ' + err.message);
+      console.error('Satellite poll failed for ' + data[i][0] + ': ' + err.message);
     }
   }
 }
