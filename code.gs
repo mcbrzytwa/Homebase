@@ -1003,7 +1003,7 @@ function reformatExistingSatellites() {
     const satelliteId = data[i][1];
     if (!satelliteId) continue;
 
-    const checkIn = CONFIG.checkIns.find(c => c.name === checkInName);
+    const checkIn = CONFIG.checkIns.find(c => c.name === checkInName || c.legacyName === checkInName || c.legacyName === checkInName);
     if (!checkIn || checkIn.type === 'okr') continue;
 
     try {
@@ -1443,7 +1443,7 @@ function syncArchivesToAllSatellites() {
     const id = data[i][1];
     if (!id) continue;
 
-    const checkIn = CONFIG.checkIns.find(c => c.name === name);
+    const checkIn = CONFIG.checkIns.find(c => c.name === name || c.legacyName === name);
     if (!checkIn || checkIn.type === 'okr') continue;
 
     syncArchiveToSatellite_(ss, id, name);
@@ -1471,7 +1471,7 @@ function pushArchiveToExistingSatellite() {
   const satellites = [];
   for (let i = 1; i < data.length; i++) {
     if (data[i][1]) {
-      const checkIn = CONFIG.checkIns.find(c => c.name === data[i][0]);
+      const checkIn = CONFIG.checkIns.find(c => c.name === data[i][0] || c.legacyName === data[i][0]);
       if (checkIn && checkIn.type === 'checkin') {
         satellites.push({ name: data[i][0], id: data[i][1] });
       }
@@ -1893,9 +1893,9 @@ function pushToAllSatellites_(sprintName, dates, intent, rolledOverAgendas) {
     const satelliteId = data[i][1];
     if (!satelliteId) continue;
     
-    const checkIn = CONFIG.checkIns.find(c => c.name === checkInName);
+    const checkIn = CONFIG.checkIns.find(c => c.name === checkInName || c.legacyName === checkInName || c.legacyName === checkInName);
     if (!checkIn) continue;
-    
+
     try {
       if (checkIn.type === 'okr') {
         syncOKRToSatellite_(ss, satelliteId);
@@ -1984,7 +1984,7 @@ function syncAllSatellitesToMaster() {
     if (!satelliteId) continue;
     
     try {
-      const checkIn = CONFIG.checkIns.find(c => c.name === checkInName);
+      const checkIn = CONFIG.checkIns.find(c => c.name === checkInName || c.legacyName === checkInName || c.legacyName === checkInName);
       if (!checkIn) continue;
       
       if (checkIn.type === 'okr') {
@@ -2021,7 +2021,17 @@ function syncAllSatellitesToMaster() {
         const data = readSectionData_(satSheet, satBounds.actions);
         writeSectionData_(masterSheet, masterBounds3.actions, data, 10);
       }
-      
+      const masterBounds4 = getSectionBoundaries_(masterSheet);
+      if (satBounds.raci && masterBounds4.raci) {
+        const data = readSectionData_(satSheet, satBounds.raci);
+        writeSectionData_(masterSheet, masterBounds4.raci, data, 5);
+      }
+      const masterBounds5 = getSectionBoundaries_(masterSheet);
+      if (satBounds.parking && masterBounds5.parking) {
+        const data = readSectionData_(satSheet, satBounds.parking);
+        writeSectionData_(masterSheet, masterBounds5.parking, data, 5);
+      }
+
       configSheet.getRange(i + 1, 4).setValue(new Date());
       configSheet.getRange(i + 1, 5).setValue('Synced');
       syncCount++;
@@ -2290,7 +2300,7 @@ function processGranolaNotesForSatellite(satelliteName, granolaText, participant
   }
   
   // Find the check-in config
-  const checkIn = CONFIG.checkIns.find(c => c.name === satelliteName);
+  const checkIn = CONFIG.checkIns.find(c => c.name === satellite || c.legacyName === satelliteName || c.legacyName === satelliteName);
   if (!checkIn) throw new Error('Satellite "' + satelliteName + '" not found in config.');
   
   // Call Claude to extract structured data from Granola notes
@@ -2437,7 +2447,7 @@ function pushToSingleSatellite_(ss, satelliteName) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] !== satelliteName || !data[i][1]) continue;
     
-    const checkIn = CONFIG.checkIns.find(c => c.name === satelliteName);
+    const checkIn = CONFIG.checkIns.find(c => c.name === satellite || c.legacyName === satelliteName || c.legacyName === satelliteName);
     if (!checkIn || checkIn.type === 'okr') continue;
     
     try {
@@ -2577,7 +2587,7 @@ function distributeFromInternalStakeholders() {
   let totalDistributed = 0;
   
   Object.entries(distributed).forEach(([satName, items]) => {
-    const checkIn = CONFIG.checkIns.find(c => c.name === satName);
+    const checkIn = CONFIG.checkIns.find(c => c.name === satName || c.legacyName === satName);
     if (!checkIn) return;
     
     const targetSheet = ss.getSheetByName(checkIn.activeSheet);
@@ -3280,7 +3290,7 @@ function syncMeetingLogFromCalendar() {
 
     // Count action items if this satellite has been processed
     let actionCount = '';
-    const checkIn = CONFIG.checkIns.find(c => c.name === satellite);
+    const checkIn = CONFIG.checkIns.find(c => c.name === satellite || c.legacyName === satellite);
     if (checkIn && checkIn.type === 'checkin') {
       const checkSheet = ss.getSheetByName(checkIn.activeSheet);
       if (checkSheet) {
@@ -3913,7 +3923,7 @@ function sendMeetingSummaryToParticipants() {
   
   if (response !== ui.Button.YES) return;
   
-  const checkIn = CONFIG.checkIns.find(c => c.name === lastSatellite);
+  const checkIn = CONFIG.checkIns.find(c => c.name === lastSatellite || c.legacyName === lastSatellite);
   const sprintInfo = getCurrentSprintInfo_(ss);
   
   // Build meeting summary from satellite data
