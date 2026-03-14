@@ -4866,267 +4866,638 @@ function navToDocActivity() { navigateToSheet_(CONFIG.sheets.docActivity); }
 
 
 // ============================================================================
-// DOCUMENT ACTIVITY DASHBOARD
+// DOCUMENT ACTIVITY DASHBOARD (Drive Activity API)
+// ============================================================================
+//
+// SETUP REQUIRED: Enable the "Google Drive Activity API" advanced service:
+//   1. In Apps Script editor, click "+" next to "Services" in the left sidebar
+//   2. Find "Google Drive Activity API" (driveactivity v2)
+//   3. Click "Add"
+//   4. Run generateDocActivityDashboard() from the menu
+//
+// This dashboard queries ALL activity across your Google Drive for the last
+// 7 days using the Drive Activity API. It shows:
+//   - Every doc with activity, who did what, when, how many times
+//   - Shares / permission changes with who was granted access
+//   - Edit, comment, create, move, rename, and delete events
+//
+// LIMITATIONS (Google platform restrictions):
+//   - "View" events are NOT exposed by Google's API (privacy policy)
+//   - View duration is not tracked by any Google API
+//   - Copy/paste is not tracked by any Google API
+//   - For view tracking, you need Google Workspace Admin audit logs
 // ============================================================================
 
 /**
- * Generates a dashboard showing activity (viewers, editors, last modified)
- * across all tracked documents: Notes Docs, Call Reports, and Satellites.
+ * Main entry point: generates the full Doc Activity Dashboard.
  */
 function generateDocActivityDashboard() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
 
-  ss.toast('Gathering document activity...', '📄 Doc Activity', -1);
+  // Check if Drive Activity API is enabled
+  if (typeof DriveActivity === 'undefined') {
+    ui.alert(
+      '⚙️ Setup Required',
+      'The Google Drive Activity API advanced service is not enabled.\n\n' +
+      'To enable it:\n' +
+      '1. Open Extensions > Apps Script\n' +
+      '2. Click "+" next to "Services" in the left sidebar\n' +
+      '3. Find "Google Drive Activity API"\n' +
+      '4. Click "Add"\n' +
+      '5. Then run this again.',
+      ui.ButtonSet.OK
+    );
+    return;
+  }
 
-  // Get or create the dashboard sheet
+  ss.toast('Querying Drive Activity API for last 7 days...', '📄 Doc Activity', -1);
+
+  // Get or create dashboard sheet
   let dashSheet = ss.getSheetByName(CONFIG.sheets.docActivity);
   if (!dashSheet) {
     dashSheet = ss.insertSheet(CONFIG.sheets.docActivity);
   }
   dashSheet.clear();
 
-  // Collect all document references
-  const allDocs = [];
+  // Query all Drive activity for last 7 days
+  const activities = queryDriveActivity7Days_();
 
-  // 1. Master spreadsheet
-  allDocs.push({ name: '🏛️ Home Base (Master)', type: 'Master', id: ss.getId(), url: ss.getUrl() });
+  // Process into structured data
+  const processed = processDriveActivities_(activities);
 
-  // 2. Satellite workbooks
-  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
-  if (configSheet && configSheet.getLastRow() > 1) {
-    const satData = configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues();
-    satData.forEach(function(row) {
-      if (row[1]) {
-        allDocs.push({ name: '📡 ' + row[0], type: 'Satellite', id: String(row[1]), url: String(row[2]) });
-      }
-    });
-  }
+  // Write the dashboard
+  writeDashboardSheet_(ss, dashSheet, processed);
 
-  // 3. Notes Docs
-  const notesSheet = ss.getSheetByName('📝 Notes Doc Registry');
-  if (notesSheet && notesSheet.getLastRow() > 1) {
-    const notesData = notesSheet.getRange(2, 1, notesSheet.getLastRow() - 1, 5).getValues();
-    notesData.forEach(function(row) {
-      if (row[1] && row[4] === 'Active') {
-        allDocs.push({ name: '📝 ' + row[0], type: 'Notes Doc', id: String(row[1]), url: String(row[2]) });
-      }
-    });
-  }
+  ss.toast('Document Activity Dashboard ready! ' + processed.docCount + ' docs with activity.', '📄 Done', 5);
+  ss.setActiveSheet(dashSheet);
+  dashSheet.getRange('A1').activate();
+}
 
-  // 4. Call Reports
-  const callSheet = ss.getSheetByName('📞 Call Report Registry');
-  if (callSheet && callSheet.getLastRow() > 1) {
-    const callData = callSheet.getDataRange().getValues();
-    const headers = callData[0];
-    const urlCol = headers.indexOf('Report Doc URL');
-    for (var i = 1; i < callData.length; i++) {
-      var reportUrl = urlCol >= 0 ? String(callData[i][urlCol]) : '';
-      var docId = extractDocIdFromUrl_(reportUrl);
-      if (docId) {
-        var label = (callData[i][2] || 'Unknown') + ' — ' + (callData[i][5] || callData[i][1] || '');
-        allDocs.push({ name: '📞 ' + label, type: 'Call Report', id: docId, url: reportUrl });
-      }
+
+/**
+ * Query Drive Activity API for all activity in last 7 days.
+ * Paginates through all results.
+ */
+function queryDriveActivity7Days_() {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const filterTime = sevenDaysAgo.toISOString();
+
+  const allActivities = [];
+  let pageToken = null;
+
+  do {
+    const request = {
+      filter: 'time >= "' + filterTime + '"',
+      consolidationStrategy: { none: {} },
+      pageSize: 100
+    };
+    if (pageToken) {
+      request.pageToken = pageToken;
     }
-  }
 
-  // Build header
+    const response = DriveActivity.Activity.query(request);
+    const activities = response.activities || [];
+    allActivities.push.apply(allActivities, activities);
+    pageToken = response.nextPageToken || null;
+
+    // Safety limit: 2000 activities max to avoid Apps Script timeout
+    if (allActivities.length >= 2000) break;
+  } while (pageToken);
+
+  return allActivities;
+}
+
+
+/**
+ * Process raw Drive Activity API responses into structured dashboard data.
+ */
+function processDriveActivities_(activities) {
+  // docId -> { name, url, mimeType, actions: [{ user, action, timestamp, details }] }
+  const docs = {};
+  // user -> { email, actionCounts: { Edit: N, ... }, docsTouched: Set, shares: [] }
+  const users = {};
+  // For daily breakdown: 'YYYY-MM-DD' -> { user -> { doc -> { action -> count } } }
+  const daily = {};
+  // Track shares specifically
+  const shareEvents = [];
+
+  activities.forEach(function(activity) {
+    // Get the target doc(s)
+    var targets = activity.targets || [];
+    var actors = activity.actors || [];
+    var actions = activity.actions || [];
+    var timestamp = getActivityTimestamp_(activity);
+    var dateStr = timestamp ? formatDateKey_(timestamp) : 'Unknown';
+
+    targets.forEach(function(target) {
+      var driveItem = target.driveItem;
+      if (!driveItem) return;
+
+      var docId = driveItem.name ? driveItem.name.replace('items/', '') : null;
+      if (!docId) return;
+
+      var docTitle = driveItem.title || 'Untitled';
+      var mimeType = driveItem.mimeType || '';
+      var docUrl = buildDriveUrl_(docId, mimeType);
+
+      // Initialize doc entry
+      if (!docs[docId]) {
+        docs[docId] = { name: docTitle, url: docUrl, mimeType: mimeType, actions: [], fileType: classifyMimeType_(mimeType) };
+      }
+
+      actors.forEach(function(actor) {
+        var userEmail = getActorEmail_(actor);
+        if (!userEmail) return;
+
+        // Initialize user entry
+        if (!users[userEmail]) {
+          users[userEmail] = { email: userEmail, actionCounts: {}, docsTouched: {}, shares: [] };
+        }
+
+        actions.forEach(function(actionWrapper) {
+          var actionType = getActionType_(actionWrapper);
+          var actionDetails = getActionDetails_(actionWrapper);
+
+          // Record in doc
+          docs[docId].actions.push({
+            user: userEmail,
+            action: actionType,
+            timestamp: timestamp,
+            date: dateStr,
+            details: actionDetails
+          });
+
+          // Record in user totals
+          users[userEmail].actionCounts[actionType] = (users[userEmail].actionCounts[actionType] || 0) + 1;
+          users[userEmail].docsTouched[docId] = docTitle;
+
+          // Record in daily breakdown
+          if (!daily[dateStr]) daily[dateStr] = {};
+          if (!daily[dateStr][userEmail]) daily[dateStr][userEmail] = {};
+          if (!daily[dateStr][userEmail][docId]) daily[dateStr][userEmail][docId] = { name: docTitle, actions: {} };
+          daily[dateStr][userEmail][docId].actions[actionType] = (daily[dateStr][userEmail][docId].actions[actionType] || 0) + 1;
+
+          // Track share events specifically
+          if (actionType === 'Permission Change' && actionDetails) {
+            shareEvents.push({
+              doc: docTitle,
+              docId: docId,
+              sharedBy: userEmail,
+              date: dateStr,
+              details: actionDetails
+            });
+            users[userEmail].shares.push({ doc: docTitle, date: dateStr, details: actionDetails });
+          }
+        });
+      });
+    });
+  });
+
+  return {
+    docs: docs,
+    users: users,
+    daily: daily,
+    shareEvents: shareEvents,
+    docCount: Object.keys(docs).length,
+    totalActions: activities.length
+  };
+}
+
+
+/**
+ * Write the full dashboard to the sheet.
+ */
+function writeDashboardSheet_(ss, sheet, data) {
   var currentRow = 1;
-  dashSheet.getRange(currentRow, 1).setValue('📄 DOCUMENT ACTIVITY DASHBOARD');
-  dashSheet.getRange(currentRow, 1).setFontSize(16).setFontWeight('bold');
+
+  // ===== HEADER =====
+  sheet.getRange(currentRow, 1).setValue('📄 DOCUMENT ACTIVITY DASHBOARD — LAST 7 DAYS');
+  sheet.getRange(currentRow, 1).setFontSize(16).setFontWeight('bold');
   currentRow++;
-  dashSheet.getRange(currentRow, 1).setValue('Generated: ' + new Date().toLocaleString());
-  dashSheet.getRange(currentRow, 1).setFontStyle('italic').setFontColor('#666666');
+  sheet.getRange(currentRow, 1).setValue('Generated: ' + new Date().toLocaleString());
+  sheet.getRange(currentRow, 1).setFontStyle('italic').setFontColor('#666666');
   currentRow++;
-  dashSheet.getRange(currentRow, 1).setValue('Total documents tracked: ' + allDocs.length);
-  dashSheet.getRange(currentRow, 1).setFontColor('#333333');
+
+  var startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  sheet.getRange(currentRow, 1).setValue('Period: ' + startDate.toLocaleDateString() + ' — ' + new Date().toLocaleDateString());
+  sheet.getRange(currentRow, 1).setFontColor('#333333');
+  currentRow++;
+  sheet.getRange(currentRow, 1).setValue('Documents with activity: ' + data.docCount + '  |  Total actions recorded: ' + data.totalActions);
+  sheet.getRange(currentRow, 1).setFontColor('#333333');
   currentRow += 2;
 
-  // Summary counts by type
-  var typeCounts = {};
-  allDocs.forEach(function(d) {
-    typeCounts[d.type] = (typeCounts[d.type] || 0) + 1;
-  });
+  // ===== SECTION 1: DOCUMENT SUMMARY =====
+  currentRow = writeSectionHeader_(sheet, currentRow, 'ALL DOCUMENTS WITH ACTIVITY (Last 7 Days)', 8);
 
-  dashSheet.getRange(currentRow, 1).setValue('DOCUMENTS BY TYPE');
-  dashSheet.getRange(currentRow, 1, 1, 2).setBackground('#000000').setFontColor('#FFFFFF').setFontWeight('bold');
-  currentRow++;
-  var typeIcons = { 'Master': '🏛️', 'Satellite': '📡', 'Notes Doc': '📝', 'Call Report': '📞' };
-  Object.keys(typeCounts).forEach(function(type) {
-    dashSheet.getRange(currentRow, 1).setValue((typeIcons[type] || '') + ' ' + type);
-    dashSheet.getRange(currentRow, 2).setValue(typeCounts[type]);
-    currentRow++;
-  });
-  currentRow += 2;
-
-  // Table headers
-  var tableHeaders = ['Document', 'Type', 'Viewers', 'Editors', 'Last Modified', 'Owner', 'Link'];
-  dashSheet.getRange(currentRow, 1, 1, tableHeaders.length).setValues([tableHeaders]);
-  dashSheet.getRange(currentRow, 1, 1, tableHeaders.length)
-    .setFontWeight('bold')
-    .setBackground('#4285F4')
-    .setFontColor('white');
-  var tableHeaderRow = currentRow;
+  var docHeaders = ['Document', 'Type', 'Total Actions', 'Unique Users', 'Edits', 'Shares', 'Comments', 'Link'];
+  sheet.getRange(currentRow, 1, 1, docHeaders.length).setValues([docHeaders]);
+  sheet.getRange(currentRow, 1, 1, docHeaders.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('white');
+  var docTableHeaderRow = currentRow;
   currentRow++;
 
-  // Fetch activity for each document
-  var dataRows = [];
-  var errors = [];
-
-  allDocs.forEach(function(doc) {
-    try {
-      var file = DriveApp.getFileById(doc.id);
-      var viewers = file.getViewers();
-      var editors = file.getEditors();
-      var lastUpdated = file.getLastUpdated();
-      var owner = file.getOwner();
-
-      dataRows.push([
-        doc.name,
-        doc.type,
-        viewers.length,
-        editors.length,
-        lastUpdated,
-        owner ? owner.getEmail() : 'Unknown',
-        doc.url
-      ]);
-    } catch (e) {
-      errors.push(doc.name + ': ' + e.message);
-      dataRows.push([
-        doc.name,
-        doc.type,
-        '—',
-        '—',
-        '—',
-        '—',
-        doc.url || ''
-      ]);
-    }
+  var docIds = Object.keys(data.docs);
+  // Sort by total actions descending
+  docIds.sort(function(a, b) {
+    return data.docs[b].actions.length - data.docs[a].actions.length;
   });
 
-  // Sort: most recently modified first
-  dataRows.sort(function(a, b) {
-    var dateA = a[4] instanceof Date ? a[4].getTime() : 0;
-    var dateB = b[4] instanceof Date ? b[4].getTime() : 0;
-    return dateB - dateA;
+  var docRows = [];
+  docIds.forEach(function(docId) {
+    var doc = data.docs[docId];
+    var uniqueUsers = {};
+    var edits = 0, shares = 0, comments = 0;
+    doc.actions.forEach(function(a) {
+      uniqueUsers[a.user] = true;
+      if (a.action === 'Edit') edits++;
+      if (a.action === 'Permission Change') shares++;
+      if (a.action === 'Comment') comments++;
+    });
+    docRows.push([
+      doc.name,
+      doc.fileType,
+      doc.actions.length,
+      Object.keys(uniqueUsers).length,
+      edits,
+      shares,
+      comments,
+      doc.url
+    ]);
   });
 
-  // Write data rows
-  if (dataRows.length > 0) {
-    dashSheet.getRange(currentRow, 1, dataRows.length, tableHeaders.length).setValues(dataRows);
-
-    // Format the table
-    for (var r = 0; r < dataRows.length; r++) {
+  if (docRows.length > 0) {
+    sheet.getRange(currentRow, 1, docRows.length, docHeaders.length).setValues(docRows);
+    for (var r = 0; r < docRows.length; r++) {
       var rowNum = currentRow + r;
-      // Alternate row colors
-      if (r % 2 === 0) {
-        dashSheet.getRange(rowNum, 1, 1, tableHeaders.length).setBackground('#f8f9fa');
+      if (r % 2 === 0) sheet.getRange(rowNum, 1, 1, docHeaders.length).setBackground('#f8f9fa');
+      // Color-code file type
+      var ftColors = { 'Sheet': '#e8f5e9', 'Doc': '#e3f2fd', 'Slides': '#fff3e0', 'PDF': '#fce4ec', 'Folder': '#f3e5f5' };
+      var ftColor = ftColors[docRows[r][1]];
+      if (ftColor) sheet.getRange(rowNum, 2).setBackground(ftColor);
+      // Clickable link
+      if (docRows[r][7] && String(docRows[r][7]).indexOf('http') === 0) {
+        sheet.getRange(rowNum, 8).setRichTextValue(
+          SpreadsheetApp.newRichTextValue().setText('Open').setLinkUrl(String(docRows[r][7])).build()
+        );
       }
-      // Color-code type column
-      var typeColors = { 'Master': '#e8f5e9', 'Satellite': '#e3f2fd', 'Notes Doc': '#fff3e0', 'Call Report': '#fce4ec' };
-      var typeColor = typeColors[dataRows[r][1]];
-      if (typeColor) {
-        dashSheet.getRange(rowNum, 2).setBackground(typeColor);
-      }
-      // Format date
-      if (dataRows[r][4] instanceof Date) {
-        dashSheet.getRange(rowNum, 5).setNumberFormat('MMM d, yyyy h:mm a');
-      }
-      // Make URL a clickable link
-      if (dataRows[r][6] && String(dataRows[r][6]).indexOf('http') === 0) {
-        var richLink = SpreadsheetApp.newRichTextValue()
-          .setText('Open')
-          .setLinkUrl(String(dataRows[r][6]))
-          .build();
-        dashSheet.getRange(rowNum, 7).setRichTextValue(richLink);
-      }
-      // Highlight high viewer/editor counts
-      if (typeof dataRows[r][2] === 'number' && dataRows[r][2] >= 5) {
-        dashSheet.getRange(rowNum, 3).setBackground('#c8e6c9').setFontWeight('bold');
-      }
-      if (typeof dataRows[r][3] === 'number' && dataRows[r][3] >= 3) {
-        dashSheet.getRange(rowNum, 4).setBackground('#c8e6c9').setFontWeight('bold');
-      }
+      // Highlight high activity
+      if (docRows[r][2] >= 10) sheet.getRange(rowNum, 3).setBackground('#c8e6c9').setFontWeight('bold');
+      if (docRows[r][5] > 0) sheet.getRange(rowNum, 6).setBackground('#fff9c4').setFontWeight('bold');
     }
-    currentRow += dataRows.length;
+    currentRow += docRows.length;
+  } else {
+    sheet.getRange(currentRow, 1).setValue('No document activity found in the last 7 days.').setFontStyle('italic');
+    currentRow++;
   }
 
   currentRow += 2;
 
-  // Viewer detail section — show who has access across all docs
-  dashSheet.getRange(currentRow, 1).setValue('VIEWER & EDITOR DIRECTORY');
-  dashSheet.getRange(currentRow, 1, 1, 3).setBackground('#000000').setFontColor('#FFFFFF').setFontWeight('bold');
+  // ===== SECTION 2: USER ACTIVITY BREAKDOWN =====
+  currentRow = writeSectionHeader_(sheet, currentRow, 'USER ACTIVITY BREAKDOWN', 7);
+
+  var userHeaders = ['User', 'Docs Touched', 'Total Actions', 'Edits', 'Comments', 'Shares Made', 'Most Active Doc'];
+  sheet.getRange(currentRow, 1, 1, userHeaders.length).setValues([userHeaders]);
+  sheet.getRange(currentRow, 1, 1, userHeaders.length).setFontWeight('bold').setBackground('#34A853').setFontColor('white');
   currentRow++;
 
-  var userAccess = {};
-  allDocs.forEach(function(doc) {
-    try {
-      var file = DriveApp.getFileById(doc.id);
-      file.getViewers().forEach(function(user) {
-        var email = user.getEmail();
-        if (!email) return;
-        if (!userAccess[email]) userAccess[email] = { view: [], edit: [] };
-        userAccess[email].view.push(doc.name);
-      });
-      file.getEditors().forEach(function(user) {
-        var email = user.getEmail();
-        if (!email) return;
-        if (!userAccess[email]) userAccess[email] = { view: [], edit: [] };
-        userAccess[email].edit.push(doc.name);
-      });
-    } catch (e) { /* already logged above */ }
+  var userEmails = Object.keys(data.users).sort(function(a, b) {
+    var totalA = 0, totalB = 0;
+    Object.values(data.users[a].actionCounts).forEach(function(v) { totalA += v; });
+    Object.values(data.users[b].actionCounts).forEach(function(v) { totalB += v; });
+    return totalB - totalA;
   });
 
-  var dirHeaders = ['User', 'Docs with Edit Access', 'Docs with View Access'];
-  dashSheet.getRange(currentRow, 1, 1, dirHeaders.length).setValues([dirHeaders]);
-  dashSheet.getRange(currentRow, 1, 1, dirHeaders.length)
-    .setFontWeight('bold')
-    .setBackground('#34A853')
-    .setFontColor('white');
-  currentRow++;
+  userEmails.forEach(function(email, idx) {
+    var user = data.users[email];
+    var totalActions = 0;
+    Object.values(user.actionCounts).forEach(function(v) { totalActions += v; });
 
-  var userEmails = Object.keys(userAccess).sort();
-  userEmails.forEach(function(email) {
-    dashSheet.getRange(currentRow, 1).setValue(email);
-    dashSheet.getRange(currentRow, 2).setValue(userAccess[email].edit.length + ' docs');
-    dashSheet.getRange(currentRow, 3).setValue(userAccess[email].view.length + ' docs');
-    if (currentRow % 2 === 0) {
-      dashSheet.getRange(currentRow, 1, 1, 3).setBackground('#f8f9fa');
-    }
+    // Find most active doc for this user
+    var docActivity = {};
+    Object.keys(data.docs).forEach(function(docId) {
+      data.docs[docId].actions.forEach(function(a) {
+        if (a.user === email) {
+          docActivity[docId] = (docActivity[docId] || 0) + 1;
+        }
+      });
+    });
+    var topDoc = '';
+    var topCount = 0;
+    Object.keys(docActivity).forEach(function(docId) {
+      if (docActivity[docId] > topCount) {
+        topCount = docActivity[docId];
+        topDoc = data.docs[docId].name;
+      }
+    });
+
+    sheet.getRange(currentRow, 1, 1, userHeaders.length).setValues([[
+      email,
+      Object.keys(user.docsTouched).length,
+      totalActions,
+      user.actionCounts['Edit'] || 0,
+      user.actionCounts['Comment'] || 0,
+      user.shares.length,
+      topDoc + (topCount > 0 ? ' (' + topCount + 'x)' : '')
+    ]]);
+    if (idx % 2 === 0) sheet.getRange(currentRow, 1, 1, userHeaders.length).setBackground('#f8f9fa');
+    if (user.shares.length > 0) sheet.getRange(currentRow, 6).setBackground('#fff9c4').setFontWeight('bold');
     currentRow++;
   });
 
   if (userEmails.length === 0) {
-    dashSheet.getRange(currentRow, 1).setValue('No shared viewers/editors found.').setFontStyle('italic');
+    sheet.getRange(currentRow, 1).setValue('No user activity found.').setFontStyle('italic');
     currentRow++;
   }
 
-  // Errors section
-  if (errors.length > 0) {
-    currentRow += 2;
-    dashSheet.getRange(currentRow, 1).setValue('⚠️ INACCESSIBLE DOCUMENTS');
-    dashSheet.getRange(currentRow, 1, 1, 2).setBackground('#FBBC04').setFontWeight('bold');
+  currentRow += 2;
+
+  // ===== SECTION 3: DAILY ACTIVITY LOG =====
+  currentRow = writeSectionHeader_(sheet, currentRow, 'DAILY ACTIVITY LOG (Per User, Per Doc)', 6);
+
+  var dailyHeaders = ['Date', 'User', 'Document', 'Action', 'Count', 'Details'];
+  sheet.getRange(currentRow, 1, 1, dailyHeaders.length).setValues([dailyHeaders]);
+  sheet.getRange(currentRow, 1, 1, dailyHeaders.length).setFontWeight('bold').setBackground('#7B1FA2').setFontColor('white');
+  currentRow++;
+
+  var dates = Object.keys(data.daily).sort().reverse();
+  var dailyRowCount = 0;
+  dates.forEach(function(dateStr) {
+    var dayUsers = data.daily[dateStr];
+    Object.keys(dayUsers).sort().forEach(function(userEmail) {
+      var dayDocs = dayUsers[userEmail];
+      Object.keys(dayDocs).forEach(function(docId) {
+        var entry = dayDocs[docId];
+        Object.keys(entry.actions).forEach(function(actionType) {
+          if (dailyRowCount >= 500) return; // Limit to prevent sheet overflow
+          var count = entry.actions[actionType];
+          sheet.getRange(currentRow, 1, 1, dailyHeaders.length).setValues([[
+            dateStr,
+            userEmail,
+            entry.name,
+            actionType,
+            count,
+            ''
+          ]]);
+          if (dailyRowCount % 2 === 0) sheet.getRange(currentRow, 1, 1, dailyHeaders.length).setBackground('#f8f9fa');
+          // Highlight action types
+          var actionColors = {
+            'Edit': '#e8f5e9', 'Permission Change': '#fff9c4', 'Comment': '#e3f2fd',
+            'Create': '#f3e5f5', 'Delete': '#ffcdd2', 'Move': '#fff3e0', 'Rename': '#e0f7fa'
+          };
+          if (actionColors[actionType]) sheet.getRange(currentRow, 4).setBackground(actionColors[actionType]);
+          currentRow++;
+          dailyRowCount++;
+        });
+      });
+    });
+  });
+
+  if (dailyRowCount === 0) {
+    sheet.getRange(currentRow, 1).setValue('No daily activity recorded.').setFontStyle('italic');
     currentRow++;
-    errors.forEach(function(err) {
-      dashSheet.getRange(currentRow, 1).setValue(err);
-      dashSheet.getRange(currentRow, 1).setFontColor('#d93025');
+  }
+
+  currentRow += 2;
+
+  // ===== SECTION 4: SHARE / PERMISSION EVENTS =====
+  currentRow = writeSectionHeader_(sheet, currentRow, 'SHARING & PERMISSION CHANGES', 4);
+
+  var shareHeaders = ['Date', 'Shared By', 'Document', 'Details'];
+  sheet.getRange(currentRow, 1, 1, shareHeaders.length).setValues([shareHeaders]);
+  sheet.getRange(currentRow, 1, 1, shareHeaders.length).setFontWeight('bold').setBackground('#F57C00').setFontColor('white');
+  currentRow++;
+
+  if (data.shareEvents.length > 0) {
+    data.shareEvents.forEach(function(evt, idx) {
+      sheet.getRange(currentRow, 1, 1, shareHeaders.length).setValues([[
+        evt.date,
+        evt.sharedBy,
+        evt.doc,
+        evt.details
+      ]]);
+      if (idx % 2 === 0) sheet.getRange(currentRow, 1, 1, shareHeaders.length).setBackground('#fff8e1');
       currentRow++;
     });
+  } else {
+    sheet.getRange(currentRow, 1).setValue('No sharing events in the last 7 days.').setFontStyle('italic');
+    currentRow++;
   }
 
-  // Column widths
-  dashSheet.setColumnWidth(1, 300);
-  dashSheet.setColumnWidth(2, 120);
-  dashSheet.setColumnWidth(3, 80);
-  dashSheet.setColumnWidth(4, 80);
-  dashSheet.setColumnWidth(5, 180);
-  dashSheet.setColumnWidth(6, 220);
-  dashSheet.setColumnWidth(7, 80);
-  dashSheet.setFrozenRows(tableHeaderRow);
+  currentRow += 2;
 
-  ss.toast('Document Activity Dashboard ready!', '📄 Done', 5);
-  ss.setActiveSheet(dashSheet);
-  dashSheet.getRange('A1').activate();
+  // ===== SECTION 5: PLATFORM LIMITATIONS NOTE =====
+  currentRow = writeSectionHeader_(sheet, currentRow, '⚠️ WHAT THIS DASHBOARD CANNOT TRACK', 5);
+
+  var limitations = [
+    ['Who viewed (opened) a doc', 'Google does not expose view events via API (privacy policy)'],
+    ['How long someone viewed', 'View duration is not tracked by any Google API'],
+    ['Copy/paste activity', 'Clipboard operations are not tracked by Google'],
+    ['How to get view data?', 'Google Workspace Admin Console > Reports > Drive audit log (requires admin access)'],
+    ['What IS tracked above?', 'Edits, shares, comments, creates, moves, renames, deletes — with who, when, and how many times']
+  ];
+
+  limitations.forEach(function(row, idx) {
+    sheet.getRange(currentRow, 1).setValue(row[0]).setFontWeight('bold');
+    sheet.getRange(currentRow, 2, 1, 4).mergeAcross().setValue(row[1]);
+    if (idx % 2 === 0) sheet.getRange(currentRow, 1, 1, 5).setBackground('#fff3e0');
+    currentRow++;
+  });
+
+  // ===== COLUMN WIDTHS =====
+  sheet.setColumnWidth(1, 220);
+  sheet.setColumnWidth(2, 220);
+  sheet.setColumnWidth(3, 250);
+  sheet.setColumnWidth(4, 140);
+  sheet.setColumnWidth(5, 80);
+  sheet.setColumnWidth(6, 300);
+  sheet.setColumnWidth(7, 200);
+  sheet.setColumnWidth(8, 80);
+  sheet.setFrozenRows(docTableHeaderRow);
+}
+
+
+// ============================================================================
+// DRIVE ACTIVITY API HELPERS
+// ============================================================================
+
+/**
+ * Write a black section header row.
+ */
+function writeSectionHeader_(sheet, row, title, colSpan) {
+  sheet.getRange(row, 1).setValue(title);
+  sheet.getRange(row, 1, 1, colSpan).setBackground('#000000').setFontColor('#FFFFFF').setFontWeight('bold');
+  return row + 1;
+}
+
+
+/**
+ * Get timestamp from an activity.
+ */
+function getActivityTimestamp_(activity) {
+  if (!activity.timestamp) return null;
+  return new Date(activity.timestamp);
+}
+
+
+/**
+ * Format date as YYYY-MM-DD for grouping.
+ */
+function formatDateKey_(date) {
+  if (!date || !(date instanceof Date)) return 'Unknown';
+  var y = date.getFullYear();
+  var m = ('0' + (date.getMonth() + 1)).slice(-2);
+  var d = ('0' + date.getDate()).slice(-2);
+  return y + '-' + m + '-' + d;
+}
+
+
+/**
+ * Get the email of an actor from a Drive Activity actor object.
+ */
+function getActorEmail_(actor) {
+  if (actor.user && actor.user.knownUser) {
+    // The personName is in format 'people/ACCOUNT_ID', need to resolve
+    var personName = actor.user.knownUser.personName;
+    if (actor.user.knownUser.isCurrentUser) {
+      return Session.getEffectiveUser().getEmail();
+    }
+    // Try to resolve via People API or use personName as fallback
+    try {
+      var person = People.People.get(personName, { personFields: 'emailAddresses' });
+      if (person.emailAddresses && person.emailAddresses.length > 0) {
+        return person.emailAddresses[0].value;
+      }
+    } catch (e) {
+      // People API not enabled or can't resolve — use ID as fallback
+    }
+    return personName || 'Unknown User';
+  }
+  if (actor.administrator) return 'Admin';
+  if (actor.system) return 'System';
+  if (actor.impersonation) return 'Impersonation';
+  return 'Anonymous';
+}
+
+
+/**
+ * Determine action type from an action wrapper.
+ */
+function getActionType_(actionWrapper) {
+  if (actionWrapper.detail) {
+    if (actionWrapper.detail.edit) return 'Edit';
+    if (actionWrapper.detail.create) return 'Create';
+    if (actionWrapper.detail.move) return 'Move';
+    if (actionWrapper.detail.rename) return 'Rename';
+    if (actionWrapper.detail.delete_) return 'Delete';
+    if (actionWrapper.detail.restore) return 'Restore';
+    if (actionWrapper.detail.permissionChange) return 'Permission Change';
+    if (actionWrapper.detail.comment) return 'Comment';
+    if (actionWrapper.detail.dlpChange) return 'DLP Change';
+    if (actionWrapper.detail.reference) return 'Reference';
+    if (actionWrapper.detail.settingsChange) return 'Settings Change';
+  }
+  // Fallback: check top-level keys
+  var keys = Object.keys(actionWrapper);
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i] !== 'detail') return keys[i];
+  }
+  return 'Unknown';
+}
+
+
+/**
+ * Get human-readable details from an action.
+ */
+function getActionDetails_(actionWrapper) {
+  var detail = actionWrapper.detail || actionWrapper;
+
+  if (detail.permissionChange) {
+    var parts = [];
+    var added = detail.permissionChange.addedPermissions || [];
+    var removed = detail.permissionChange.removedPermissions || [];
+    added.forEach(function(p) {
+      var who = '';
+      if (p.user && p.user.knownUser && p.user.knownUser.personName) {
+        who = p.user.knownUser.personName;
+      } else if (p.anyone) {
+        who = 'Anyone with link';
+      } else if (p.domain) {
+        who = 'Domain: ' + (p.domain.name || '');
+      } else if (p.group) {
+        who = 'Group: ' + (p.group.email || '');
+      }
+      var role = p.role || '';
+      parts.push('Added ' + role + (who ? ' for ' + who : ''));
+    });
+    removed.forEach(function(p) {
+      parts.push('Removed access');
+    });
+    return parts.join('; ') || 'Permission changed';
+  }
+
+  if (detail.comment) {
+    var commentType = '';
+    if (detail.comment.post) commentType = 'Posted comment';
+    if (detail.comment.assignment) commentType = 'Assigned';
+    if (detail.comment.suggestion) commentType = 'Suggestion';
+    if (detail.comment.deletedPost) commentType = 'Deleted comment';
+    if (detail.comment.editedPost) commentType = 'Edited comment';
+    if (detail.comment.resolvedPost) commentType = 'Resolved comment';
+    if (detail.comment.reopenedPost) commentType = 'Reopened comment';
+    return commentType || 'Comment activity';
+  }
+
+  if (detail.rename) {
+    return 'Renamed' + (detail.rename.newTitle ? ' to "' + detail.rename.newTitle + '"' : '');
+  }
+
+  if (detail.move) {
+    var addedParents = (detail.move.addedParents || []).map(function(p) {
+      return p.driveItem ? p.driveItem.title : '';
+    }).filter(Boolean);
+    if (addedParents.length > 0) return 'Moved to ' + addedParents.join(', ');
+    return 'Moved';
+  }
+
+  return '';
+}
+
+
+/**
+ * Build a Google Drive URL from a file ID and mime type.
+ */
+function buildDriveUrl_(fileId, mimeType) {
+  if (!fileId) return '';
+  if (mimeType === 'application/vnd.google-apps.document') {
+    return 'https://docs.google.com/document/d/' + fileId;
+  }
+  if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+    return 'https://docs.google.com/spreadsheets/d/' + fileId;
+  }
+  if (mimeType === 'application/vnd.google-apps.presentation') {
+    return 'https://docs.google.com/presentation/d/' + fileId;
+  }
+  if (mimeType === 'application/vnd.google-apps.folder') {
+    return 'https://drive.google.com/drive/folders/' + fileId;
+  }
+  return 'https://drive.google.com/file/d/' + fileId;
+}
+
+
+/**
+ * Classify a MIME type into a friendly label.
+ */
+function classifyMimeType_(mimeType) {
+  if (!mimeType) return 'File';
+  if (mimeType.indexOf('spreadsheet') >= 0) return 'Sheet';
+  if (mimeType.indexOf('document') >= 0) return 'Doc';
+  if (mimeType.indexOf('presentation') >= 0) return 'Slides';
+  if (mimeType.indexOf('form') >= 0) return 'Form';
+  if (mimeType.indexOf('folder') >= 0) return 'Folder';
+  if (mimeType.indexOf('pdf') >= 0) return 'PDF';
+  if (mimeType.indexOf('image') >= 0) return 'Image';
+  if (mimeType.indexOf('video') >= 0) return 'Video';
+  return 'File';
 }
 
 
