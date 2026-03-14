@@ -118,6 +118,16 @@ const CONFIG = {
     'Q4': '#F3E5F5'
   },
   
+  // Sprint cadence (2-week sprints)
+  sprintCadence: {
+    durationWeeks: 2,
+    ceremonies: [
+      { name: 'Sprint Planning → Push to IS', dayOffset: 0, description: 'ED sprint planning, push to internal stakeholders EOD' },
+      { name: 'External Kick-Off (Chanel)', dayOffset: 2, description: 'Sprint kick-off with external stakeholders' },
+      { name: 'Internal Sync', dayOffset: 11, description: 'Bi-weekly internal stakeholder sync (all directors)' },
+    ]
+  },
+
   // Protected range for satellite header (rows 1-5)
   satelliteProtectedRows: 5
 };
@@ -2332,6 +2342,14 @@ function createNext4WeeksSheet_(ss) {
   // Pre-populated near-term items (Sprint 3: Mar 14-27, Sprint 4: Mar 28 - Apr 10)
   // Week 0 = Mar 14-20, Week 1 = Mar 21-27, Week 2 = Mar 28 - Apr 3, Week 3 = Apr 4-10
   const nearTermItems = [
+    { section: '⏱️ Sprint Ceremonies', items: [
+      { task: 'Sprint 3: Sprint Planning → Push to Internal Stakeholders (Mon EOD)', owner: 'ED', status: 'Not Started', week: 0 },
+      { task: 'Sprint 3: External Kick-Off with Chanel (Wed)', owner: 'ED + Team', status: 'Not Started', week: 0 },
+      { task: 'Sprint 3: Internal Sync — Bi-weekly IS Meeting (Fri)', owner: 'All Directors', status: 'Not Started', week: 1 },
+      { task: 'Sprint 4: Sprint Planning → Push to Internal Stakeholders (Mon EOD)', owner: 'ED', status: 'Not Started', week: 2 },
+      { task: 'Sprint 4: External Kick-Off with Chanel (Wed)', owner: 'ED + Team', status: 'Not Started', week: 2 },
+      { task: 'Sprint 4: Internal Sync — Bi-weekly IS Meeting (Fri)', owner: 'All Directors', status: 'Not Started', week: 3 },
+    ]},
     { section: '📋 DELIVERABLES DUE Fri Mar 20 (before Yana presentation)', items: [
       { task: 'Advisory Committee Proposal: names, expectations, engagement model, comms plan', owner: 'ED', status: 'Not Started', week: 0 },
       { task: 'Preliminary Plan for MC/Lumi Discovery Tour', owner: 'ED + Lumi', status: 'Not Started', week: 0 },
