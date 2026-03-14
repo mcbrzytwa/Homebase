@@ -249,6 +249,8 @@ function buildNavigationMenus_(ui) {
   checkInSubMenu.addItem('Production (Richard Lonsdorf)', 'navToProductionSync');
   checkInSubMenu.addItem('Curator (Lumi Tan)', 'navToCurator');
   checkInSubMenu.addItem('Internal Stakeholders', 'navToInternalStakeholders');
+  checkInSubMenu.addItem('Advancement (Katie)', 'navToAdvancement');
+  checkInSubMenu.addItem('ED (maryclarebrzytwa)', 'navToED');
   checkInSubMenu.addItem('Director ML', 'navToDirectorML');
   checkInSubMenu.addItem('Director MI', 'navToDirectorMI');
   checkInSubMenu.addItem('Technical Director', 'navToTechnicalDirector');
@@ -269,6 +271,8 @@ function buildNavigationMenus_(ui) {
   satellitesMenu.addItem('🎛️ Production (Richard Lonsdorf)', 'openSatelliteProduction');
   satellitesMenu.addItem('🎨 Curator (Lumi Tan)', 'openSatelliteCurator');
   satellitesMenu.addItem('👥 Internal Stakeholders', 'openSatelliteInternalStakeholders');
+  satellitesMenu.addItem('📈 Advancement (Katie)', 'openSatelliteAdvancement');
+  satellitesMenu.addItem('👔 ED (maryclarebrzytwa)', 'openSatelliteED');
   satellitesMenu.addSeparator();
   satellitesMenu.addItem('🎬 Director ML (TBD)', 'openSatelliteDirectorML');
   satellitesMenu.addItem('🖥️ Director MI (TBD)', 'openSatelliteDirectorMI');
@@ -298,6 +302,8 @@ function navToSprintTemplate() { navigateToSheet_('⏱️ Sprint Template'); }
 function navToProductionSync() { navigateToSheet_('Production Sync '); }
 function navToCurator() { navigateToSheet_('Curator Check-In'); }
 function navToInternalStakeholders() { navigateToSheet_('Internal Stakeholders Check-In'); }
+function navToAdvancement() { navigateToSheet_('Advancement Check-In'); }
+function navToED() { navigateToSheet_('ED Check-In'); }
 function navToDirectorML() { navigateToSheet_('Director ML Check-In'); }
 function navToDirectorMI() { navigateToSheet_('Director MI Check-In'); }
 function navToTechnicalDirector() { navigateToSheet_('Technical Director Check-In'); }
@@ -344,6 +350,8 @@ function navigateToRecentSprint_(index) {
 function openSatelliteProduction() { openSatelliteByName_('Production'); }
 function openSatelliteCurator() { openSatelliteByName_('Curator'); }
 function openSatelliteInternalStakeholders() { openSatelliteByName_('Internal Stakeholders'); }
+function openSatelliteAdvancement() { openSatelliteByName_('Advancement'); }
+function openSatelliteED() { openSatelliteByName_('ED'); }
 function openSatelliteDirectorML() { openSatelliteByName_('Director ML'); }
 function openSatelliteDirectorMI() { openSatelliteByName_('Director MI'); }
 function openSatelliteTechnicalDirector() { openSatelliteByName_('Technical Director'); }
@@ -3399,6 +3407,8 @@ function syncMeetingLogFromCalendar() {
     'Production': ['production', 'richard lonsdorf', 'richard'],
     'Curator': ['curator', 'lumi tan', 'lumi', 'student life'],
     'Internal Stakeholders': ['internal stakeholder', 'all directors', 'team meeting', 'is check-in', 'is sync'],
+    'Advancement': ['advancement', 'katie'],
+    'ED': ['ed check-in', 'executive director', 'maryclarebrzytwa'],
     'Director ML': ['director ml', 'machine learning'],
     'Director MI': ['director mi', 'moving image'],
     'Technical Director': ['technical director', 'tech director'],
