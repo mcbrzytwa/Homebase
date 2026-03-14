@@ -2301,28 +2301,17 @@ function syncOKRSatelliteOnly() {
  */
 function refreshMasterRACI() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let raciSheet = ss.getSheetByName(CONFIG.sheets.masterRaci);
-  
-  if (!raciSheet) {
-    raciSheet = createMasterRACISheet_();
-  }
-  
-  ss.toast('Refreshing Master RACI Tracker...', '📋 RACI', -1);
-  
-  const sprintInfo = getCurrentSprintInfo_(ss);
-  
-  // Clear existing data and stale data validation (keep headers)
-  const lastRow = Math.max(raciSheet.getLastRow(), 500);
-  if (lastRow > 1) {
-    raciSheet.getRange(2, 1, lastRow - 1, 9).clearContent().clearDataValidations();
-  }
 
-  // Re-apply status dropdown on column E only (allow invalid so programmatic writes succeed)
-  const statusRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(CONFIG.dropdownOptions.actionStatus, true)
-    .setAllowInvalid(true)
-    .build();
-  raciSheet.getRange('E2:E500').setDataValidation(statusRule);
+  // Always recreate the sheet from scratch to avoid stale data validation issues
+  const existing = ss.getSheetByName(CONFIG.sheets.masterRaci);
+  if (existing) {
+    ss.deleteSheet(existing);
+  }
+  const raciSheet = createMasterRACISheet_();
+
+  ss.toast('Refreshing Master RACI Tracker...', '📋 RACI', -1);
+
+  const sprintInfo = getCurrentSprintInfo_(ss);
   
   const allActions = [];
   
