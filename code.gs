@@ -2320,10 +2320,11 @@ function refreshMasterRACI() {
   
   CONFIG.checkIns.forEach(checkIn => {
     if (checkIn.type === 'okr') return;
-    
-    const sheet = ss.getSheetByName(checkIn.activeSheet);
+
+    // Read from the satellite workbook's Check-In sheet (not Hub tabs)
+    const sheet = getSatelliteCheckInSheet_(checkIn.name);
     if (!sheet) return;
-    
+
     // Pull action items (dynamic boundaries)
     const bounds = getSectionBoundaries_(sheet);
     const actionData = bounds.actions ? readSectionData_(sheet, bounds.actions) : [];
@@ -2348,7 +2349,7 @@ function refreshMasterRACI() {
     const decisionsData = bounds.decisions ? readSectionData_(sheet, bounds.decisions) : [];
     decisionsData.forEach(row => {
       if (!row[0] || String(row[0]).trim() === '') return;
-      
+
       // Add decisions that have follow-ups as action items
       if (row[3] && String(row[3]).trim() !== '') {
         allActions.push([
@@ -2697,90 +2698,73 @@ function logMeeting_(ss, satelliteName, participants, notes, extracted) {
 function distributeFromInternalStakeholders() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
-  
-  const isSheet = ss.getSheetByName('Internal Stakeholders Check-In');
+
+  // Open the Internal Stakeholders satellite workbook
+  const isSheet = getSatelliteCheckInSheet_('Internal Stakeholders');
   if (!isSheet) {
-    ui.alert('Internal Stakeholders Check-In sheet not found.');
+    ui.alert('Internal Stakeholders satellite not found.\n\nMake sure it is listed in the ⚙️ Satellite Config sheet.');
     return;
   }
-  
+
   // Build owner → satellite mapping
   const ownerMap = {};
   CONFIG.checkIns.forEach(c => {
     if (c.type === 'checkin' && c.owner && c.name !== 'Internal Stakeholders') {
-      // Map owner names to satellite names
       const names = c.owner.split(',').map(n => n.trim().toLowerCase());
-      names.forEach(name => {
-        ownerMap[name] = c.name;
-      });
+      names.forEach(name => { ownerMap[name] = c.name; });
     }
   });
-  
-  // Also add known name mappings from CONFIG.nameToFunction → satellite name
-  // nameToFunction maps to RACI functions; we need to map to satellite names
+
+  // Also map known person names to satellite names
   const functionToSatellite = {
-    'Advancement': null,             // No dedicated satellite
-    'Production': 'Production',
-    'Curator': 'Curator',
-    'ED': null,                      // ED is the hub owner
-    "President's Office": null,
-    'CHANEL': null,
-    'Provost': null,
-    'BB6': null,
-    'Research': null
+    'Advancement': null, 'Production': 'Production', 'Curator': 'Curator',
+    'ED': null, "President's Office": null, 'CHANEL': null,
+    'Provost': null, 'BB6': null, 'Research': null
   };
   Object.entries(CONFIG.nameToFunction).forEach(([name, fn]) => {
     const sat = functionToSatellite[fn];
     if (sat) ownerMap[name] = sat;
   });
-  
-  // Read action items from Internal Stakeholders sheet (dynamic boundaries)
+
+  // Read action items from Internal Stakeholders satellite
   const isBounds = getSectionBoundaries_(isSheet);
   const actionData = isBounds.actions ? readSectionData_(isSheet, isBounds.actions) : [];
-  
+
   const distributed = {};
   const unmatched = [];
-  
+
   actionData.forEach(row => {
     if (!row[0] || String(row[0]).trim() === '') return;
-    
+
     const owner = String(row[1] || '').trim().toLowerCase();
     let targetSatellite = null;
-    
-    // Try to match owner to a satellite
+
     for (const [key, sat] of Object.entries(ownerMap)) {
       if (owner.includes(key) || key.includes(owner)) {
         targetSatellite = sat;
         break;
       }
     }
-    
+
     if (targetSatellite) {
-      if (!distributed[targetSatellite]) {
-        distributed[targetSatellite] = [];
-      }
+      if (!distributed[targetSatellite]) distributed[targetSatellite] = [];
       distributed[targetSatellite].push(row);
     } else if (owner) {
       unmatched.push(row);
     }
   });
-  
-  // Distribute to each satellite
+
+  // Distribute to each target satellite workbook
   let totalDistributed = 0;
-  
+
   Object.entries(distributed).forEach(([satName, items]) => {
-    const checkIn = CONFIG.checkIns.find(c => c.name === satName || c.legacyName === satName);
-    if (!checkIn) return;
-    
-    const targetSheet = ss.getSheetByName(checkIn.activeSheet);
+    const targetSheet = getSatelliteCheckInSheet_(satName);
     if (!targetSheet) return;
 
-    // Use dynamic boundaries to find action items section
     const targetBounds = getSectionBoundaries_(targetSheet);
     if (!targetBounds.actions) return;
 
     const existingActions = readSectionData_(targetSheet, targetBounds.actions);
-    // Append new items to existing (non-empty) action rows
     const newActions = existingActions.filter(r => r.some(c => String(c).trim() !== ''));
     items.forEach(item => {
       newActions.push([
@@ -2794,23 +2778,20 @@ function distributeFromInternalStakeholders() {
       totalDistributed++;
     });
     writeSectionData_(targetSheet, targetBounds.actions, newActions, 10);
-    
-    // Push to satellite workbook
-    pushToSingleSatellite_(ss, satName);
   });
-  
+
   // Refresh master RACI
   refreshMasterRACI();
-  
+
   let message = totalDistributed + ' action item(s) distributed to satellite trackers:\n\n';
   Object.entries(distributed).forEach(([sat, items]) => {
     message += '• ' + sat + ': ' + items.length + ' item(s)\n';
   });
-  
+
   if (unmatched.length > 0) {
     message += '\n⚠️ ' + unmatched.length + ' item(s) could not be matched to a satellite (unknown owner).';
   }
-  
+
   ui.alert('📤 Distribution Complete', message, ui.ButtonSet.OK);
 }
 
@@ -4465,7 +4446,7 @@ function getSatelliteIds_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
   if (!configSheet) return [];
-  
+
   const data = configSheet.getDataRange().getValues();
   const ids = [];
   for (let i = 1; i < data.length; i++) {
@@ -4474,6 +4455,24 @@ function getSatelliteIds_() {
     }
   }
   return ids;
+}
+
+/**
+ * Opens a satellite workbook by check-in name and returns its Check-In sheet.
+ * Looks up the spreadsheet ID from the Satellite Config tab.
+ * Returns null if not found.
+ */
+function getSatelliteCheckInSheet_(checkInName) {
+  const satellites = getSatelliteIds_();
+  const match = satellites.find(s => s.name === checkInName);
+  if (!match) return null;
+  try {
+    const satellite = SpreadsheetApp.openById(match.id);
+    return satellite.getSheetByName('Check-In') || null;
+  } catch (err) {
+    console.error('Could not open satellite "' + checkInName + '": ' + err.message);
+    return null;
+  }
 }
 
 
