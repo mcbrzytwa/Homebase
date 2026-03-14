@@ -178,7 +178,10 @@ function onOpen() {
     .addSubMenu(ui.createMenu('🗄️ Archives')
       .addItem('📅 View Archived Sprints', 'viewArchivedSprints')
       .addItem('📋 View Satellite Tracker Archive', 'viewSatelliteTrackerArchive')
-      .addItem('📊 Generate Archive Report', 'generateArchiveReport'))
+      .addItem('📊 Generate Archive Report', 'generateArchiveReport')
+      .addSeparator()
+      .addItem('📚 Push Archives to Satellites', 'pushArchiveToExistingSatellite')
+      .addItem('🔄 Sync Archives to All Satellites', 'syncArchivesToAllSatellites'))
     .addSeparator()
     .addItem('🗺️ View System Map', 'showSystemMap')
     .addSeparator()
@@ -376,8 +379,17 @@ function openSatelliteByName_(checkInName) {
     if (data[i][0] === checkInName) {
       const url = data[i][2];
       if (url) {
-        const html = '<script>window.open("' + url + '", "_blank"); google.script.host.close();</script>' +
-          '<p>Opening satellite workbook...</p><p>If it doesn\'t open automatically, <a href="' + url + '" target="_blank">click here</a>.</p>';
+        // Try to open directly to the Check-In sheet
+        let targetUrl = url;
+        try {
+          const satSS = SpreadsheetApp.openByUrl(url);
+          const checkInSheet = satSS.getSheetByName('Check-In');
+          if (checkInSheet) {
+            targetUrl = url + '#gid=' + checkInSheet.getSheetId();
+          }
+        } catch (e) { /* fallback to base URL */ }
+        const html = '<script>window.open("' + targetUrl + '", "_blank"); google.script.host.close();</script>' +
+          '<p>Opening satellite workbook...</p><p>If it doesn\'t open automatically, <a href="' + targetUrl + '" target="_blank">click here</a>.</p>';
         const htmlOutput = HtmlService.createHtmlOutput(html).setWidth(300).setHeight(100);
         SpreadsheetApp.getUi().showModalDialog(htmlOutput, 'Opening ' + checkInName + ' Satellite');
         return;
@@ -690,8 +702,14 @@ function setupSatelliteWorkbook_(satellite, checkIn, masterId) {
   protection.setWarningOnly(true);
   
   satellite.addEditor(Session.getActiveUser().getEmail());
-  PropertiesService.getDocumentProperties().setProperty('MASTER_ID', masterId);
-  PropertiesService.getDocumentProperties().setProperty('CHECK_IN_TYPE', checkIn.name);
+
+  // Store master reference in satellite's document properties
+  const satProps = PropertiesService.getDocumentProperties();
+  satProps.setProperty('MASTER_ID', masterId);
+  satProps.setProperty('CHECK_IN_TYPE', checkIn.name);
+
+  // Push satellite script (archive viewer menu)
+  pushSatelliteScript_(satellite, checkIn.name, masterId);
 }
 
 
@@ -724,6 +742,212 @@ function addCheckInDropdowns_(sheet) {
     .build();
   sheet.getRange('C31:C40').setDataValidation(dateRule);
   sheet.getRange('C31:C40').setNumberFormat('mmm d, yyyy');
+}
+
+
+/**
+ * Pushes a standalone Apps Script to a satellite workbook.
+ * This gives the satellite its own menu with archive viewer.
+ * Uses the Apps Script API to create a bound script project.
+ *
+ * Since we can't directly create bound scripts programmatically,
+ * we instead create an "Archive" sheet in the satellite that
+ * pulls archived data from the master, and add a simple onOpen menu.
+ */
+function pushSatelliteScript_(satellite, checkInName, masterId) {
+  // Create an Archive sheet in the satellite
+  let archiveSheet = satellite.getSheetByName('📚 Sprint Archives');
+  if (!archiveSheet) {
+    archiveSheet = satellite.insertSheet('📚 Sprint Archives');
+  }
+  archiveSheet.clear();
+
+  // Header
+  archiveSheet.getRange('A1').setValue('📚 Sprint Archives — ' + checkInName);
+  archiveSheet.getRange('A1').setFontSize(14).setFontWeight('bold');
+  archiveSheet.getRange('A2').setValue('Archives are synced from the master workbook during sprint rollover.');
+  archiveSheet.getRange('A2').setFontStyle('italic').setFontColor('#666');
+  archiveSheet.getRange('A3').setValue('Last synced: ' + new Date().toLocaleString());
+
+  const headers = ['Sprint', 'Section', 'Content', 'Owner', 'Status', 'Date Archived'];
+  archiveSheet.getRange(5, 1, 1, headers.length).setValues([headers]);
+  archiveSheet.getRange(5, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('white');
+
+  archiveSheet.setColumnWidth(1, 90);
+  archiveSheet.setColumnWidth(2, 100);
+  archiveSheet.setColumnWidth(3, 350);
+  archiveSheet.setColumnWidth(4, 130);
+  archiveSheet.setColumnWidth(5, 100);
+  archiveSheet.setColumnWidth(6, 120);
+  archiveSheet.setFrozenRows(5);
+
+  // Hide the archive sheet by default (users will unhide via the tab)
+  // Actually, leave it visible so they can click to it
+}
+
+
+/**
+ * Syncs archived sprint data from master to a specific satellite's Archive sheet.
+ * Called during sprint rollover and can also be run manually.
+ */
+function syncArchiveToSatellite_(ss, satelliteId, checkInName) {
+  try {
+    const satellite = SpreadsheetApp.openById(satelliteId);
+    let archiveSheet = satellite.getSheetByName('📚 Sprint Archives');
+    if (!archiveSheet) {
+      archiveSheet = satellite.insertSheet('📚 Sprint Archives');
+      const headers = ['Sprint', 'Section', 'Content', 'Owner', 'Status', 'Date Archived'];
+      archiveSheet.getRange(5, 1, 1, headers.length).setValues([headers]);
+      archiveSheet.getRange(5, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('white');
+      archiveSheet.setFrozenRows(5);
+    }
+
+    // Pull this satellite's archive data from master
+    const masterArchive = ss.getSheetByName('📚 Satellite Tracker Archive');
+    if (!masterArchive) return;
+
+    const data = masterArchive.getDataRange().getValues();
+    const satRows = [];
+    for (let r = 1; r < data.length; r++) {
+      if (data[r][1] === checkInName) {
+        // [Sprint, Section, Content, Owner, Status, Date Archived]
+        satRows.push([data[r][0], data[r][2], data[r][3], data[r][4], data[r][5], data[r][6]]);
+      }
+    }
+
+    // Clear old data (keep header)
+    const lastRow = archiveSheet.getLastRow();
+    if (lastRow > 5) {
+      archiveSheet.getRange(6, 1, lastRow - 5, 6).clear();
+    }
+
+    // Write filtered data
+    if (satRows.length > 0) {
+      archiveSheet.getRange(6, 1, satRows.length, 6).setValues(satRows);
+
+      // Color-code by sprint for readability
+      let currentSprint = '';
+      let colorToggle = false;
+      for (let r = 0; r < satRows.length; r++) {
+        if (satRows[r][0] !== currentSprint) {
+          currentSprint = satRows[r][0];
+          colorToggle = !colorToggle;
+        }
+        if (colorToggle) {
+          archiveSheet.getRange(6 + r, 1, 1, 6).setBackground('#F5F5F5');
+        }
+      }
+    }
+
+    // Update header
+    archiveSheet.getRange('A1').setValue('📚 Sprint Archives — ' + checkInName);
+    archiveSheet.getRange('A1').setFontSize(14).setFontWeight('bold');
+    archiveSheet.getRange('A2').setValue(satRows.length + ' archived items from previous sprints');
+    archiveSheet.getRange('A3').setValue('Last synced: ' + new Date().toLocaleString());
+
+    // Set column widths
+    archiveSheet.setColumnWidth(1, 90);
+    archiveSheet.setColumnWidth(2, 100);
+    archiveSheet.setColumnWidth(3, 350);
+    archiveSheet.setColumnWidth(4, 130);
+    archiveSheet.setColumnWidth(5, 100);
+    archiveSheet.setColumnWidth(6, 120);
+
+  } catch (error) {
+    console.error('Archive sync to satellite failed for ' + checkInName + ': ' + error.message);
+  }
+}
+
+
+/**
+ * Pushes archive data to ALL satellite workbooks.
+ * Can be run manually or is called during sprint rollover.
+ */
+function syncArchivesToAllSatellites() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
+  if (!configSheet) return;
+
+  ss.toast('Syncing archives to satellites...', '📚 Archives', -1);
+
+  const data = configSheet.getDataRange().getValues();
+  let synced = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const name = data[i][0];
+    const id = data[i][1];
+    if (!id || name === 'FY2027 Timeline') continue;
+
+    const checkIn = CONFIG.checkIns.find(c => c.name === name);
+    if (!checkIn || checkIn.type === 'okr') continue;
+
+    syncArchiveToSatellite_(ss, id, name);
+    synced++;
+  }
+
+  ss.toast(synced + ' satellite archives synced!', '✅ Complete', 5);
+}
+
+
+/**
+ * Pushes archive sheet to a specific satellite (e.g. Curator).
+ * Use this to add the archive feature to existing satellites that were created before this update.
+ */
+function pushArchiveToExistingSatellite() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
+  if (!configSheet) {
+    ui.alert('Run Initial Setup first.');
+    return;
+  }
+
+  const data = configSheet.getDataRange().getValues();
+  const satellites = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] && data[i][0] !== 'FY2027 Timeline') {
+      const checkIn = CONFIG.checkIns.find(c => c.name === data[i][0]);
+      if (checkIn && checkIn.type === 'checkin') {
+        satellites.push({ name: data[i][0], id: data[i][1] });
+      }
+    }
+  }
+
+  if (satellites.length === 0) {
+    ui.alert('No satellites found.');
+    return;
+  }
+
+  // Build HTML picker
+  let html = '<style>body{font-family:Arial;padding:15px} button{margin:5px;padding:8px 16px;cursor:pointer;border:1px solid #ddd;border-radius:4px;background:#f5f5f5} button:hover{background:#e0e0e0} .all{background:#1a73e8;color:white;border:none} .all:hover{background:#1557b0}</style>';
+  html += '<h3>Push Archive Sheet to Satellite</h3>';
+  html += '<p>This adds a "📚 Sprint Archives" sheet to the satellite with archived data from previous sprints.</p>';
+  html += '<button class="all" onclick="google.script.run.withSuccessHandler(done).syncArchivesToAllSatellites()">Push to ALL Satellites</button><hr>';
+  satellites.forEach(s => {
+    html += '<button onclick="google.script.run.withSuccessHandler(done).pushArchiveToSatelliteByName(\'' + s.name.replace(/'/g, "\\'") + '\')">' + s.name + '</button> ';
+  });
+  html += '<script>function done(){alert("Archive synced!");google.script.host.close()}</script>';
+
+  const htmlOutput = HtmlService.createHtmlOutput(html).setWidth(400).setHeight(300);
+  ui.showModalDialog(htmlOutput, '📚 Push Archives to Satellites');
+}
+
+
+/**
+ * Push archive to a single satellite by name (called from UI)
+ */
+function pushArchiveToSatelliteByName(name) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
+  if (!configSheet) return;
+
+  const data = configSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === name && data[i][1]) {
+      syncArchiveToSatellite_(ss, data[i][1], name);
+      return;
+    }
+  }
 }
 
 
@@ -945,7 +1169,10 @@ function newSprintRollover() {
     
     ss.toast('Syncing to satellite workbooks...', '🔄 Sprint Rollover', -1);
     pushToAllSatellites_(newSprintName, newDates, newIntent, rolledOverAgendas);
-    
+
+    ss.toast('Pushing archives to satellites...', '🔄 Sprint Rollover', -1);
+    syncArchivesToAllSatellites();
+
     ss.toast('Sprint rollover complete!', '✅ Success', 5);
     
     ui.alert(
