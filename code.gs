@@ -177,7 +177,10 @@ function onOpen() {
       .addItem('🔄 Reformat Existing Satellites to v2', 'reformatExistingSatellites')
       .addItem('🔧 Fix Formula References', 'fixFormulaReferences')
       .addItem('📅 Setup Timelines (Full Year + Next 6 Sprints)', 'setupTimelines')
-      .addItem('📝 Update Config Email', 'promptForEmail'))
+      .addItem('📝 Update Config Email', 'promptForEmail')
+      .addSeparator()
+      .addItem('⏱️ Enable Auto Due-Date Conversion (satellites)', 'createSprintDateConversionTrigger')
+      .addItem('❌ Disable Auto Due-Date Conversion', 'removeSprintDateConversionTrigger'))
     .addToUi();
   
   // Build navigation menus
@@ -1207,6 +1210,103 @@ function onEdit(e) {
 
   e.range.setValue(secondThursday);
   e.range.setNumberFormat('MMM d, yyyy');
+}
+
+
+/**
+ * Scans all satellite spreadsheets for unconverted sprint-relative due date
+ * values (e.g. "This Sprint", "Next Sprint") and converts them to actual dates.
+ * This is needed because the Hub's onEdit trigger cannot fire on satellite edits.
+ * Run this on a short time-based trigger (every 1–5 minutes).
+ */
+function convertSprintDatesInSatellites() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
+  if (!configSheet) return;
+
+  const sprintOptions = CONFIG.dropdownOptions.sprintDueDate;
+  const sprintOffsetMap = {
+    'This Sprint': 0, 'Next Sprint': 1, '+2 Sprints': 2,
+    '+3 Sprints': 3, '+4 Sprints': 4, '+5 Sprints': 5
+  };
+
+  const data = configSheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    const satelliteId = data[i][1];
+    if (!satelliteId) continue;
+
+    try {
+      const satellite = SpreadsheetApp.openById(satelliteId);
+      const sheet = satellite.getSheetByName('Check-In');
+      if (!sheet) continue;
+
+      const bounds = getSectionBoundaries_(sheet);
+      if (!bounds.actions) continue;
+
+      const startRow = bounds.actions.start;
+      const endRow = bounds.actions.end;
+      if (endRow < startRow) continue;
+
+      // Read column C (Due Date) for the Action Items section
+      const range = sheet.getRange(startRow, 3, endRow - startRow + 1, 1);
+      const values = range.getValues();
+
+      for (let r = 0; r < values.length; r++) {
+        const val = String(values[r][0]).trim();
+        if (sprintOffsetMap[val] !== undefined) {
+          const offset = sprintOffsetMap[val];
+
+          const today = new Date();
+          const startOfWeek = new Date(today);
+          startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
+
+          const targetSprintStart = new Date(startOfWeek);
+          targetSprintStart.setDate(startOfWeek.getDate() + (offset * 14));
+
+          const secondThursday = new Date(targetSprintStart);
+          secondThursday.setDate(targetSprintStart.getDate() + 10);
+
+          const cell = sheet.getRange(startRow + r, 3);
+          cell.setValue(secondThursday);
+          cell.setNumberFormat('MMM d, yyyy');
+        }
+      }
+    } catch (err) {
+      console.error('Sprint date conversion failed for satellite ' + data[i][0] + ': ' + err.message);
+    }
+  }
+}
+
+/**
+ * Creates a trigger that runs convertSprintDatesInSatellites every 5 minutes.
+ */
+function createSprintDateConversionTrigger() {
+  // Remove any existing trigger for this function
+  ScriptApp.getProjectTriggers().forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'convertSprintDatesInSatellites') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  ScriptApp.newTrigger('convertSprintDatesInSatellites')
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+
+  SpreadsheetApp.getUi().alert('✅ Sprint date conversion trigger created (runs every 5 minutes)');
+}
+
+/**
+ * Removes the sprint date conversion trigger.
+ */
+function removeSprintDateConversionTrigger() {
+  ScriptApp.getProjectTriggers().forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'convertSprintDatesInSatellites') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  SpreadsheetApp.getUi().alert('✅ Sprint date conversion trigger removed');
 }
 
 
