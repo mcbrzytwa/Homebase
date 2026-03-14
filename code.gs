@@ -2151,26 +2151,35 @@ function createFullYearTimelineSheet_(ss) {
   // ---- PRE-POPULATED MILESTONES FROM YANA DECK + TRANSCRIPT ----
   // Each milestone: [category, monthIndex (0-based in months array), label, isTBD]
   const milestones = [
-    // HIRING & TEAM
-    { cat: '👥 Hiring & Team', items: [
-      { month: 0, label: 'Lab Technician / Directors Search Begins', tbd: false },
+    // HIRING
+    { cat: '👥 Hiring', items: [
+      { month: 0, label: 'Phase 1: Internal JD Approval (By Mar 13)', tbd: false },
+      { month: 0, label: 'Phase 2: Finalize & Post JDs (By Mar 20)', tbd: false },
+      { month: 0, label: 'Phase 3: Open Search Window (Mar 20 – Apr 27)', tbd: false },
+      { month: 1, label: 'Phase 3 continues (Mar 20 – Apr 27)', tbd: false },
+      { month: 1, label: 'Phase 4: Close Search (Week of Apr 28)', tbd: false },
+      { month: 2, label: 'Phase 5: Interviews (May 12 – May 23)', tbd: false },
       { month: 2, label: '⏳ Directors of ML + Moving Image Appointed', tbd: true },
       { month: 3, label: '⏳ Full Team in Place', tbd: true },
-      { month: 2, label: '⏳ CCAT Job Descriptions Finalized', tbd: true },
+    ]},
+    // ADVISORY COMMS
+    { cat: '📣 Advisory Committee Comms', items: [
+      { month: 0, label: 'Comms 1: Broad Thank-You / Readout w/ JD Links (Mar 24)', tbd: false },
+      { month: 1, label: 'Comms 2: Individual Formal AC Invitations (Apr 7–14)', tbd: false },
+      { month: 3, label: '⏳ Advisory Committee Established', tbd: true },
     ]},
     // BUDGET & GOVERNANCE
     { cat: '💰 Budget & Governance', items: [
       { month: 0, label: 'Dedicated Budget Meeting (Financial deep-dive w/ Chanel)', tbd: false },
       { month: 0, label: 'Budget Refinement (Advancement + ED)', tbd: false },
       { month: 1, label: '⏳ Budget Proposal for Speaker Series + Visiting Artists', tbd: true },
-      { month: 3, label: '⏳ Advisory Committee Established', tbd: true },
     ]},
     // BUILDING & FACILITIES
     { cat: '🏗️ Building (BB6)', items: [
       { month: 0, label: 'BB6 Equipment Plan (ED + IT)', tbd: false },
       { month: 0, label: 'Itemized Equipment List (Deliverable)', tbd: false },
       { month: 0, label: 'Facilities / IT Status Meeting for Advancement', tbd: false },
-      { month: 1, label: '⏳ Architect Visit to Campus', tbd: true },
+      { month: 0, label: 'Mar 24: Architect Visit to CalArts', tbd: false },
       { month: 2, label: '⏳ BB6 Construction Handover (End of May target)', tbd: true },
       { month: 3, label: 'BB6 Complete (Hard Deadline)', tbd: false },
     ]},
@@ -2181,6 +2190,7 @@ function createFullYearTimelineSheet_(ss) {
       { month: 4, label: '⏳ Orientation Event (Speaker Series #3) — Open House + Demos', tbd: true },
       { month: 5, label: '⏳ Faculty/Staff Open House & Center Walkthrough', tbd: true },
       { month: 5, label: '⏳ Ribbon Cutting / Center Launch', tbd: true },
+      { month: 6, label: '⏳ Fall Programming with Visiting Artists', tbd: true },
     ]},
     // CURATION & RESEARCH
     { cat: '🎨 Curation & Research', items: [
@@ -2193,9 +2203,12 @@ function createFullYearTimelineSheet_(ss) {
       { month: 6, label: '⏳ Year 2 Research + Artist Program Revealed', tbd: true },
     ]},
     // COMMUNICATIONS & REPORTING
-    { cat: '📣 Communications', items: [
+    { cat: '📣 Reporting & Deliverables', items: [
       { month: 0, label: 'Tech Notes + Takeaways Shared with Yana, Ravi, Provost', tbd: false },
-      { month: 0, label: '⏳ Report to Yana Peel (~Mar 28)', tbd: true },
+      { month: 0, label: 'Mar 27: Presentation to Yana Peel', tbd: false },
+      { month: 0, label: 'Due Mar 20: Advisory Committee Proposal (names, expectations, engagement, comms)', tbd: false },
+      { month: 0, label: 'Due Mar 20: Preliminary Plan for MC/Lumi Discovery Tour', tbd: false },
+      { month: 0, label: 'Due Mar 20: Fall Programming with Artists Plan', tbd: false },
       { month: 4, label: '⏳ Full Team Announcement', tbd: true },
       { month: 12, label: '⏳ Symposium and White Paper (CCAT Major Contribution)', tbd: true },
     ]},
@@ -2297,24 +2310,38 @@ function createNext4WeeksSheet_(ss) {
   sheet.getRange(4, 1, 1, headerRow.length).setValues([headerRow]);
   sheet.getRange(4, 1, 1, headerRow.length).setFontWeight('bold').setBackground('#1a73e8').setFontColor('#FFFFFF');
 
-  // Pre-populate with near-term items from today's meeting transcript (Mar 14)
-  // These are the action items and milestones for the next ~4 weeks
+  // Pre-populated near-term items
+  // Week 0 = Mar 14-20, Week 1 = Mar 21-27, Week 2 = Mar 28 - Apr 3, Week 3 = Apr 4-10
   const nearTermItems = [
+    { section: '📋 DELIVERABLES DUE Fri Mar 20 (before Yana presentation)', items: [
+      { task: 'Advisory Committee Proposal: names, expectations, engagement model, comms plan', owner: 'ED', status: 'Not Started', week: 0 },
+      { task: 'Preliminary Plan for MC/Lumi Discovery Tour', owner: 'ED + Lumi', status: 'Not Started', week: 0 },
+      { task: 'Fall Programming with Artists Plan', owner: 'ED + Lumi', status: 'Not Started', week: 0 },
+      { task: 'Prepare Sprint Deck update for Yana presentation', owner: 'ED', status: 'Not Started', week: 0 },
+      { task: 'Add speaker series recommendation to deck (2 models)', owner: 'ED', status: 'Not Started', week: 0 },
+    ]},
+    { section: '👥 Hiring Pipeline', items: [
+      { task: 'Phase 2: Finalize & Post JDs (By Mar 20)', owner: 'ED', status: 'In Progress', week: 0 },
+      { task: 'Phase 3: Open Search Window begins Mar 20', owner: 'ED', status: 'Not Started', week: 0 },
+      { task: 'Comms 1: Broad Thank-You / Readout with JD Links (Mar 24)', owner: 'ED', status: 'Not Started', week: 1 },
+      { task: 'Phase 3: Search Window open (ongoing through Apr 27)', owner: 'ED', status: 'Not Started', week: 2 },
+    ]},
+    { section: '🏗️ Building & Key Dates', items: [
+      { task: 'BB6 Equipment Plan finalization', owner: 'ED + IT', status: 'In Progress', week: 0 },
+      { task: 'Itemized Equipment List (Deliverable)', owner: 'ED', status: 'In Progress', week: 0 },
+      { task: '🏛️ Mar 24: Architect Visit to CalArts', owner: 'ED + Andreas', status: 'Confirmed', week: 1 },
+      { task: '📣 Mar 27: Presentation to Yana Peel', owner: 'ED + Katie', status: 'Confirmed', week: 1 },
+    ]},
     { section: '🎪 Apr 9 Event (Speaker Series #2)', items: [
       { task: 'Confirm main gallery space (Lund Theater sound resolution)', owner: 'Richard', status: 'In Progress', week: 0 },
       { task: 'Reach out to Steve Lamb (Art School) for student interviewer', owner: 'Richard', status: 'Not Started', week: 0 },
       { task: 'Get proposal from John Threat (IDEA event details)', owner: 'Alex Jacoby', status: 'In Progress', week: 0 },
-      { task: 'Book Nico for filming + Raphael for photos', owner: 'Richard', status: 'Not Started', week: 0 },
+      { task: 'Book Nico for filming + Raphael for photos + ECO team', owner: 'Richard', status: 'Not Started', week: 0 },
+      { task: 'Revise budget (CCAT absorbs full stage cost, no cost-sharing with IDEA)', owner: 'Richard', status: 'Not Started', week: 0 },
       { task: 'Confirm Mashinka studio visit / campus walkthrough', owner: 'Richard', status: 'Not Started', week: 1 },
       { task: 'Create survey/QR feedback mechanism for attendees', owner: 'Richard', status: 'Not Started', week: 1 },
-      { task: 'Coordinate ECO team for event logistics', owner: 'Richard', status: 'Not Started', week: 1 },
-      { task: 'Revise budget (CCAT absorbs full stage cost, no cost-sharing with IDEA)', owner: 'Richard', status: 'Not Started', week: 0 },
+      { task: 'Comms 2: Individual Formal AC Invitations (Apr 7–14)', owner: 'ED', status: 'Not Started', week: 3 },
       { task: '🎪 EVENT DAY: Apr 9 — Mashinka Talk 4:30pm + IDEA Roundtable 6pm', owner: 'All', status: 'Upcoming', week: 3 },
-    ]},
-    { section: '📣 Chanel / Reporting', items: [
-      { task: '⏳ Report to Yana Peel (~Mar 28)', owner: 'ED', status: 'Not Started', week: 2 },
-      { task: 'Prepare Sprint Deck update for Chanel meeting', owner: 'ED', status: 'Not Started', week: 1 },
-      { task: 'Add speaker series recommendation to Chanel deck (2 models)', owner: 'ED', status: 'Not Started', week: 1 },
     ]},
     { section: '🎨 Curation', items: [
       { task: '⏳ Lumi LA visit — studio visits + curation model deep-dive', owner: 'Lumi + ED', status: 'Planning', week: 2 },
@@ -2322,21 +2349,11 @@ function createNext4WeeksSheet_(ss) {
       { task: 'Research art/tech residency models (ongoing)', owner: 'Lumi', status: 'In Progress', week: 0 },
       { task: 'Send Michael Langan event recording to Lumi', owner: 'Richard', status: 'Not Started', week: 0 },
     ]},
-    { section: '👥 Hiring & Onboarding', items: [
-      { task: 'CCAT Job Descriptions drafted with team feedback', owner: 'ED', status: 'In Progress', week: 0 },
-      { task: 'Lab Technician / Directors Search continues', owner: 'ED', status: 'In Progress', week: 0 },
-      { task: 'Team Building + Onboarding activities', owner: 'ED + Curator + Producer', status: 'In Progress', week: 0 },
-    ]},
-    { section: '🏗️ Building & IT', items: [
-      { task: 'BB6 Equipment Plan finalization', owner: 'ED + IT', status: 'In Progress', week: 0 },
-      { task: 'Itemized Equipment List (Deliverable)', owner: 'ED', status: 'In Progress', week: 0 },
-      { task: 'Facilities / IT Status Meeting for Advancement', owner: 'IT + ED', status: 'Not Started', week: 1 },
-      { task: '⏳ Architect visit to campus', owner: 'ED + Andreas', status: 'Planning', week: 2 },
-    ]},
     { section: '🏫 Internal', items: [
       { task: 'Investigate Alan Chen AI Symposium history + relevance', owner: 'ED', status: 'Not Started', week: 1 },
       { task: 'Technology Group Synthesis and Next Steps', owner: 'ED', status: 'In Progress', week: 0 },
       { task: 'Richard + Lumi meeting with Anthony (Student Services) re: orientation', owner: 'Richard + Lumi', status: 'Not Started', week: 1 },
+      { task: 'Facilities / IT Status Meeting for Advancement', owner: 'IT + ED', status: 'Not Started', week: 1 },
     ]},
   ];
 
@@ -2353,7 +2370,7 @@ function createNext4WeeksSheet_(ss) {
       sheet.getRange(currentRow, 3).setValue(item.status);
 
       // Color status cell
-      const statusColors = { 'Complete': '#C8E6C9', 'In Progress': '#BBDEFB', 'Not Started': '#F5F5F5', 'Blocked': '#FFCDD2', 'Planning': '#FFF9C4', 'Upcoming': '#E1BEE7' };
+      const statusColors = { 'Complete': '#C8E6C9', 'In Progress': '#BBDEFB', 'Not Started': '#F5F5F5', 'Blocked': '#FFCDD2', 'Planning': '#FFF9C4', 'Upcoming': '#E1BEE7', 'Confirmed': '#DCEDC8' };
       sheet.getRange(currentRow, 3).setBackground(statusColors[item.status] || '#F5F5F5');
 
       // Place marker in correct week column
