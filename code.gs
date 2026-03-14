@@ -59,6 +59,8 @@ const CONFIG = {
     { name: 'Production', activeSheet: 'Production Sync ', title: 'CCAT Production Check-In', type: 'checkin', owner: 'Richard Lonsdorf', preserveLink: true, legacyName: 'Production' },
     { name: 'Curator', activeSheet: 'Curator Check-In', title: 'CCAT Curator Check-In', type: 'checkin', owner: 'Lumi Tan', preserveLink: true, legacyName: 'Student Life' },
     { name: 'Internal Stakeholders', activeSheet: 'Internal Stakeholders Check-In', title: 'Internal Stakeholders Check-In', type: 'checkin', owner: 'All Directors', preserveLink: true, legacyName: 'IT' },
+    { name: 'Advancement', activeSheet: 'Advancement Check-In', title: 'CCAT Advancement Check-In', type: 'checkin', owner: 'Katie', preserveLink: false },
+    { name: 'ED', activeSheet: 'ED Check-In', title: 'CCAT ED Check-In', type: 'checkin', owner: 'maryclarebrzytwa', preserveLink: false },
     { name: 'Director ML', activeSheet: 'Director ML Check-In', title: 'Director ML Check-In', type: 'checkin', owner: 'TBD (Director, ML)', preserveLink: false },
     { name: 'Director MI', activeSheet: 'Director MI Check-In', title: 'Director MI Check-In', type: 'checkin', owner: 'TBD (Director, MI)', preserveLink: false },
     { name: 'Technical Director', activeSheet: 'Technical Director Check-In', title: 'Technical Director Check-In', type: 'checkin', owner: 'TBD (Technical Director)', preserveLink: false },
@@ -105,9 +107,11 @@ const CONFIG = {
     'katie': 'Advancement',
     'andreas': 'Advancement',
     'kari': 'Advancement',
-    'lumi': 'Production',
-    'richard': 'Curator',
+    'lumi': 'Curator',
+    'richard': 'Production',
     'mc': 'ED',
+    'maryclarebrzytwa': 'ED',
+    'maryclare': 'ED',
     'kiara': "President's Office",
     'ravi': "President's Office",
     'irene': 'CHANEL',
@@ -2722,8 +2726,8 @@ function distributeFromInternalStakeholders() {
 
   // Also map known person names to satellite names
   const functionToSatellite = {
-    'Advancement': null, 'Production': 'Production', 'Curator': 'Curator',
-    'ED': null, "President's Office": null, 'CHANEL': null,
+    'Advancement': 'Advancement', 'Production': 'Production', 'Curator': 'Curator',
+    'ED': 'ED', "President's Office": null, 'CHANEL': null,
     'Provost': null, 'BB6': null, 'Research': null
   };
   Object.entries(CONFIG.nameToFunction).forEach(([name, fn]) => {
