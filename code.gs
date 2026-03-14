@@ -48,6 +48,7 @@ const CONFIG = {
     next4Weeks: '📅 Next 4 Weeks',
     sprintDeckData: '📊 Sprint Deck Data',
     meetingLog: '📝 Meeting Log',
+    timelineChangeLog: '📅 Timeline Change Log',
   },
   
   // Satellite check-in types — REVISED
@@ -157,7 +158,9 @@ function onOpen() {
       .addItem('📅 View Next 4 Weeks', 'navToNext4Weeks')
       .addSeparator()
       .addItem('🔄 Refresh Full Year Timeline', 'refreshFullYearTimeline')
-      .addItem('🔄 Refresh Next 4 Weeks', 'refreshNext4Weeks'))
+      .addItem('🔄 Refresh Next 4 Weeks', 'refreshNext4Weeks')
+      .addSeparator()
+      .addItem('📋 View Timeline Change Log', 'navToTimelineChangeLog'))
     .addSeparator()
     .addSubMenu(ui.createMenu('📝 Meeting Notes (Granola)')
       .addItem('📥 Process Granola Notes for Satellite', 'processGranolaNotes')
@@ -289,6 +292,7 @@ function navToMasterRACI() { navigateToSheet_('📋 Master RACI Tracker'); }
 function navToTimeline() { navigateToSheet_('📅 FY2027 Timeline'); }
 function navToFullYearTimeline() { navigateToSheet_('📅 Full Year Timeline'); }
 function navToNext4Weeks() { navigateToSheet_('📅 Next 4 Weeks'); }
+function navToTimelineChangeLog() { navigateToSheet_('📅 Timeline Change Log'); }
 function navToSprintPlanning() { navigateToSheet_('🗓️ Sprint Planning'); }
 function navToSprintTemplate() { navigateToSheet_('⏱️ Sprint Template'); }
 function navToProductionSync() { navigateToSheet_('Production Sync '); }
@@ -435,6 +439,9 @@ function initialSetup() {
     
     ss.toast('Creating Sprint Deck Data sheet...', '⚙️ Setup', -1);
     createSprintDeckDataSheet_();
+
+    ss.toast('Creating Timeline Change Log...', '⚙️ Setup', -1);
+    createTimelineChangeLogSheet_(ss);
 
     ss.toast('Creating Full Year Timeline...', '⚙️ Setup', -1);
     createFullYearTimelineSheet_(ss);
@@ -1535,18 +1542,25 @@ function processGranolaNotesForSatellite(satelliteName, granolaText, participant
   // Log the meeting
   logMeeting_(ss, satelliteName, participantsStr, granolaText, extracted);
   
+  // Update timelines from extracted milestones/dates
+  let timelineCount = 0;
+  if (extracted.timelineUpdates && extracted.timelineUpdates.length > 0) {
+    timelineCount = updateTimelinesFromMeeting_(ss, extracted.timelineUpdates, satelliteName);
+  }
+
   // Store participants and summary for later email sending
   const props = PropertiesService.getDocumentProperties();
   props.setProperty('LAST_MEETING_SATELLITE', satelliteName);
   props.setProperty('LAST_MEETING_PARTICIPANTS', participantsStr);
   props.setProperty('LAST_MEETING_SUMMARY', extracted.summary || '');
-  
+
   const actionCount = extracted.actionItems ? extracted.actionItems.length : 0;
   const decisionCount = extracted.decisions ? extracted.decisions.length : 0;
-  
+
   return 'Meeting notes processed!\n\n' +
     '• ' + actionCount + ' action items extracted\n' +
     '• ' + decisionCount + ' decisions recorded\n' +
+    '• ' + timelineCount + ' timeline update(s) logged\n' +
     '• Satellite tracker updated\n' +
     '• Master RACI refreshed\n\n' +
     'Use "Send Meeting Summary to Participants" to email attendees.';
@@ -1563,9 +1577,20 @@ function extractMeetingData_(apiKey, granolaText, satelliteName, owner) {
     '2. "agenda": Array of {topic, owner, notes, priority} - topics discussed\n' +
     '3. "decisions": Array of {decision, owner, impact, followUp} - decisions made\n' +
     '4. "actionItems": Array of {task, owner, dueDate, status} - action items assigned\n' +
-    '5. "participants": Array of names of people who participated\n\n' +
+    '5. "participants": Array of names of people who participated\n' +
+    '6. "timelineUpdates": Array of timeline milestones, deadlines, or date changes discussed. Each item:\n' +
+    '   {milestone, date, category, owner, changeType, details}\n' +
+    '   - milestone: Short name of the milestone or deliverable\n' +
+    '   - date: Target date in "Mon DD, YYYY" format (e.g. "Mar 24, 2026"). If no firm date, use first of the estimated month and set isTBD to true\n' +
+    '   - isTBD: boolean, true if no firm date was committed (just discussed/estimated)\n' +
+    '   - category: One of "Hiring", "Budget", "Building", "Events", "Curation", "Communications", "Academic", "Other"\n' +
+    '   - owner: Who is responsible\n' +
+    '   - changeType: "new" (new milestone), "moved" (date changed), "completed", "cancelled"\n' +
+    '   - details: Brief context about why this was added/changed (what was said in the meeting)\n\n' +
     'For priority use P0-P3 (P0=critical). For impact use High/Medium/Low.\n' +
     'For status default to "Not Started". For dueDate use format like "Mar 15, 2026" or leave empty.\n' +
+    'For timelineUpdates, capture ANY dates, deadlines, milestones, events, or scheduling changes discussed.\n' +
+    'If someone says "let\'s push that to May" or "we need this by the 20th", capture it.\n' +
     'Return ONLY valid JSON, no markdown.\n\n' +
     '--- MEETING NOTES ---\n' + granolaText;
   
@@ -2642,6 +2667,278 @@ function syncMeetingLogFromCalendar() {
   if (rows.length === 0) {
     ui.alert('📝 No Meetings Found', 'No CCAT-related meetings found in your calendar for the past/next 30 days.\n\nMake sure your meeting titles include CCAT-related keywords (e.g., "CCAT", "check-in", "sprint", satellite names, etc.)', ui.ButtonSet.OK);
   }
+}
+
+
+// ============================================================================
+// TIMELINE CHANGE LOG & AUTO-UPDATE FROM MEETINGS
+// ============================================================================
+
+/**
+ * Creates the Timeline Change Log sheet for tracking all timeline modifications.
+ */
+function createTimelineChangeLogSheet_(ss) {
+  if (ss.getSheetByName(CONFIG.sheets.timelineChangeLog)) return;
+
+  const sheet = ss.insertSheet(CONFIG.sheets.timelineChangeLog);
+  const headers = ['Date', 'Source Meeting', 'Change Type', 'Milestone', 'Previous Date', 'New Date', 'Is TBD', 'Category', 'Owner', 'Details', 'Changed By'];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('white');
+
+  sheet.setColumnWidth(1, 110);
+  sheet.setColumnWidth(2, 170);
+  sheet.setColumnWidth(3, 90);
+  sheet.setColumnWidth(4, 280);
+  sheet.setColumnWidth(5, 110);
+  sheet.setColumnWidth(6, 110);
+  sheet.setColumnWidth(7, 60);
+  sheet.setColumnWidth(8, 110);
+  sheet.setColumnWidth(9, 130);
+  sheet.setColumnWidth(10, 350);
+  sheet.setColumnWidth(11, 100);
+  sheet.setFrozenRows(1);
+}
+
+
+/**
+ * Processes timeline updates extracted from a meeting by Claude.
+ * Compares against existing Full Year Timeline entries,
+ * updates both timelines, and logs all changes.
+ *
+ * @param {Spreadsheet} ss - Active spreadsheet
+ * @param {Array} timelineUpdates - Array from Claude: [{milestone, date, isTBD, category, owner, changeType, details}]
+ * @param {string} sourceMeeting - Which satellite meeting this came from
+ * @returns {number} Number of changes processed
+ */
+function updateTimelinesFromMeeting_(ss, timelineUpdates, sourceMeeting) {
+  // Ensure change log exists
+  createTimelineChangeLogSheet_(ss);
+  const logSheet = ss.getSheetByName(CONFIG.sheets.timelineChangeLog);
+
+  // Read existing Full Year Timeline to find matches
+  const fullYearSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
+  let existingMilestones = [];
+  if (fullYearSheet) {
+    const data = fullYearSheet.getDataRange().getValues();
+    for (let r = 6; r < data.length; r++) {
+      if (data[r][0] && String(data[r][0]).trim() && !String(data[r][0]).startsWith('👥') &&
+          !String(data[r][0]).startsWith('💰') && !String(data[r][0]).startsWith('🏗') &&
+          !String(data[r][0]).startsWith('🎪') && !String(data[r][0]).startsWith('🎨') &&
+          !String(data[r][0]).startsWith('📣') && !String(data[r][0]).startsWith('🎓')) {
+        // Find which month column has a marker
+        let markerCol = -1;
+        for (let c = 1; c < data[r].length; c++) {
+          if (data[r][c] && String(data[r][c]).trim()) {
+            markerCol = c;
+            break;
+          }
+        }
+        existingMilestones.push({
+          row: r + 1,
+          label: String(data[r][0]).trim(),
+          markerCol: markerCol,
+        });
+      }
+    }
+  }
+
+  const months = [
+    'Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026',
+    'Jul 2026', 'Aug 2026', 'Sep 2026', 'Oct 2026',
+    'Nov 2026', 'Dec 2026', 'Jan 2027', 'Feb 2027',
+    'Mar 2027', 'Apr 2027', 'May 2027', 'Jun 2027'
+  ];
+
+  const changeLogColors = {
+    'new': '#C8E6C9',
+    'moved': '#FFF9C4',
+    'completed': '#BBDEFB',
+    'cancelled': '#FFCDD2'
+  };
+
+  let changesProcessed = 0;
+  const dateNow = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+
+  timelineUpdates.forEach(update => {
+    if (!update.milestone) return;
+
+    // Parse the target date to find which month column
+    let targetMonthIndex = -1;
+    let dateStr = update.date || '';
+    if (dateStr) {
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) {
+        const monthStr = parsed.toLocaleString('default', { month: 'short' }) + ' ' + parsed.getFullYear();
+        targetMonthIndex = months.findIndex(m => m === monthStr);
+      }
+    }
+
+    // Try to find an existing milestone that matches (fuzzy match on label)
+    const updateLabelClean = update.milestone.toLowerCase().replace(/[⏳✅🎪📣🏛️]/g, '').trim();
+    let matched = existingMilestones.find(em => {
+      const existingClean = em.label.toLowerCase().replace(/[⏳✅🎪📣🏛️]/g, '').trim();
+      // Check for substantial overlap
+      return existingClean.includes(updateLabelClean) || updateLabelClean.includes(existingClean) ||
+        levenshteinSimilarity_(existingClean, updateLabelClean) > 0.6;
+    });
+
+    let previousDate = '';
+    let changeType = update.changeType || 'new';
+
+    if (matched && matched.markerCol >= 0) {
+      // Existing milestone found — get its current month
+      previousDate = months[matched.markerCol - 1] || '';
+
+      if (changeType === 'moved' || (targetMonthIndex >= 0 && matched.markerCol - 1 !== targetMonthIndex)) {
+        changeType = 'moved';
+        // Update the Full Year Timeline: clear old marker, place new one
+        if (fullYearSheet) {
+          fullYearSheet.getRange(matched.row, matched.markerCol + 1).clear();
+          if (targetMonthIndex >= 0) {
+            const isTBD = update.isTBD !== false;
+            const marker = isTBD ? '⏳' : '✅';
+            const bgColor = isTBD ? '#F3E5F5' : '#C8E6C9';
+            fullYearSheet.getRange(matched.row, targetMonthIndex + 2).setValue(marker)
+              .setHorizontalAlignment('center').setFontSize(12).setBackground(bgColor);
+            // Update label if it gained/lost TBD
+            const currentLabel = fullYearSheet.getRange(matched.row, 1).getValue();
+            if (isTBD && !String(currentLabel).startsWith('⏳')) {
+              fullYearSheet.getRange(matched.row, 1).setValue('⏳ ' + currentLabel).setFontColor('#9C27B0');
+            } else if (!isTBD && String(currentLabel).startsWith('⏳')) {
+              fullYearSheet.getRange(matched.row, 1).setValue(String(currentLabel).replace(/^⏳\s*/, '')).setFontColor(null);
+            }
+          }
+        }
+      } else if (changeType === 'completed') {
+        if (fullYearSheet) {
+          fullYearSheet.getRange(matched.row, 1).setFontColor('#4CAF50');
+          if (matched.markerCol >= 0) {
+            fullYearSheet.getRange(matched.row, matched.markerCol + 1).setValue('✅')
+              .setBackground('#C8E6C9');
+          }
+        }
+      }
+    } else if (changeType === 'new' && targetMonthIndex >= 0 && fullYearSheet) {
+      // New milestone — find the right section and add it
+      addMilestoneToFullYear_(fullYearSheet, update, targetMonthIndex, months);
+    }
+
+    // Log the change
+    const newDate = targetMonthIndex >= 0 ? months[targetMonthIndex] + (dateStr ? ' (' + dateStr + ')' : '') : dateStr;
+    logSheet.appendRow([
+      dateNow,
+      sourceMeeting + ' Check-In',
+      changeType,
+      update.milestone,
+      previousDate,
+      newDate,
+      update.isTBD ? 'Yes' : 'No',
+      update.category || '',
+      update.owner || '',
+      update.details || '',
+      'Auto (Granola)'
+    ]);
+
+    // Color the change type cell
+    const lastRow = logSheet.getLastRow();
+    const color = changeLogColors[changeType] || '#F5F5F5';
+    logSheet.getRange(lastRow, 3).setBackground(color);
+
+    changesProcessed++;
+  });
+
+  // Update the timestamp on Full Year Timeline
+  if (fullYearSheet) {
+    fullYearSheet.getRange('A2').setValue('Last updated: ' + new Date().toLocaleString() + '  |  ⏳ = Date is TBD  |  Auto-updated from ' + sourceMeeting + ' meeting');
+  }
+
+  return changesProcessed;
+}
+
+
+/**
+ * Adds a new milestone row to the Full Year Timeline in the appropriate category section.
+ */
+function addMilestoneToFullYear_(sheet, update, monthIndex, months) {
+  const categoryMap = {
+    'Hiring': '👥 Hiring',
+    'Budget': '💰 Budget',
+    'Building': '🏗️ Building',
+    'Events': '🎪 Events',
+    'Curation': '🎨 Curation',
+    'Communications': '📣 Reporting',
+    'Academic': '🎓 Academic',
+  };
+
+  const targetSection = categoryMap[update.category] || '';
+  const data = sheet.getDataRange().getValues();
+
+  // Find the section and its last item row
+  let insertRow = -1;
+  let inSection = false;
+  for (let r = 6; r < data.length; r++) {
+    const cellVal = String(data[r][0] || '').trim();
+    if (targetSection && cellVal.includes(targetSection)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection) {
+      // Check if we've hit the next section header (dark background) or empty spacer
+      if (cellVal === '' || (cellVal.startsWith('👥') || cellVal.startsWith('💰') || cellVal.startsWith('🏗') ||
+          cellVal.startsWith('🎪') || cellVal.startsWith('🎨') || cellVal.startsWith('📣') || cellVal.startsWith('🎓'))) {
+        insertRow = r + 1; // Insert before the spacer/next section
+        break;
+      }
+    }
+  }
+
+  // If we didn't find a section, append at the bottom
+  if (insertRow < 0) {
+    insertRow = sheet.getLastRow() + 1;
+  }
+
+  // Insert a new row
+  sheet.insertRowBefore(insertRow);
+
+  const isTBD = update.isTBD !== false;
+  const label = (isTBD ? '⏳ ' : '') + update.milestone;
+  sheet.getRange(insertRow, 1).setValue(label);
+  if (isTBD) {
+    sheet.getRange(insertRow, 1).setFontColor('#9C27B0');
+  }
+
+  const marker = isTBD ? '⏳' : '✅';
+  const bgColor = isTBD ? '#F3E5F5' : '#C8E6C9';
+  sheet.getRange(insertRow, monthIndex + 2).setValue(marker)
+    .setHorizontalAlignment('center').setFontSize(12).setBackground(bgColor);
+}
+
+
+/**
+ * Simple Levenshtein-based similarity score (0 to 1) for fuzzy milestone matching.
+ */
+function levenshteinSimilarity_(s1, s2) {
+  if (s1 === s2) return 1;
+  const len1 = s1.length, len2 = s2.length;
+  if (!len1 || !len2) return 0;
+
+  const matrix = [];
+  for (let i = 0; i <= len1; i++) { matrix[i] = [i]; }
+  for (let j = 0; j <= len2; j++) { matrix[0][j] = j; }
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  const maxLen = Math.max(len1, len2);
+  return 1 - (matrix[len1][len2] / maxLen);
 }
 
 
