@@ -2298,13 +2298,32 @@ function createNext4WeeksSheet_(ss) {
     weeks.push({ start: weekStart, end: weekEnd, label: label });
   }
 
+  // Get current sprint info to label the 2-week blocks
+  const sprintInfo = getCurrentSprintInfo_(ss);
+  const sprintNameStr = String(sprintInfo.name || 'Sprint 1');
+  const currentSprintNum = parseInt(sprintNameStr.replace(/[^0-9]/g, '')) || 1;
+
   // Title
   sheet.getRange('A1').setValue('📅 Next 4 Weeks — Detailed View');
   sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
   sheet.getRange('A2').setValue('Generated: ' + today.toLocaleString() + '  |  ⏳ = TBD date  |  Run "Refresh Next 4 Weeks" to update');
   sheet.getRange('A2').setFontStyle('italic').setFontColor('#666');
 
-  // Header row
+  // Row 3: Sprint labels spanning 2 weeks each
+  // Current sprint covers weeks 0-1, next sprint covers weeks 2-3
+  const sprintLabelRow = ['', '', ''];
+  sprintLabelRow.push('Sprint ' + currentSprintNum);
+  sprintLabelRow.push('');
+  sprintLabelRow.push('Sprint ' + (currentSprintNum + 1));
+  sprintLabelRow.push('');
+  sheet.getRange(3, 1, 1, sprintLabelRow.length).setValues([sprintLabelRow]);
+  // Merge sprint labels across their 2 week columns
+  sheet.getRange(3, 4, 1, 2).merge().setHorizontalAlignment('center').setFontWeight('bold')
+    .setBackground('#C9A227').setFontColor('#000000').setFontSize(11);
+  sheet.getRange(3, 6, 1, 2).merge().setHorizontalAlignment('center').setFontWeight('bold')
+    .setBackground('#4285F4').setFontColor('#FFFFFF').setFontSize(11);
+
+  // Row 4: Week headers
   const headerRow = ['Task / Milestone', 'Owner', 'Status'];
   weeks.forEach(w => headerRow.push('Week of ' + w.label));
   sheet.getRange(4, 1, 1, headerRow.length).setValues([headerRow]);
