@@ -187,6 +187,7 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(ui.createMenu('⚙️ Setup')
       .addItem('🚀 Initial Setup (Create Satellites)', 'initialSetup')
+      .addItem('🔄 Reformat Existing Satellites to v2', 'reformatExistingSatellites')
       .addItem('🔧 Fix Formula References', 'fixFormulaReferences')
       .addItem('📅 Setup Timelines (Full Year + 4 Weeks)', 'setupTimelines')
       .addItem('📅 Setup FY2027 Timeline Satellite', 'setupTimelineSatellite')
@@ -549,16 +550,13 @@ function createSatelliteWorkbooks_() {
           configSheet.getRange(row, 3).setValue(legacySat.getUrl());
           configSheet.getRange(row, 4).setValue(new Date());
           configSheet.getRange(row, 5).setValue('Migrated');
-          
+
           // Rename the satellite workbook
           const satName = 'CCAT Check-In — ' + checkIn.name;
           legacySat.rename(satName);
-          
-          // Update the sheet title
-          const checkInSheet = legacySat.getSheetByName('Check-In');
-          if (checkInSheet) {
-            checkInSheet.getRange('A1').setValue(checkIn.title);
-          }
+
+          // Reformat the satellite to v2 layout (preserves URL, updates structure)
+          reformatSatelliteToV2_(legacyId, checkIn, ss.getId());
         } catch (e) {
           console.error('Could not migrate legacy satellite: ' + e.message);
         }
@@ -710,6 +708,180 @@ function setupSatelliteWorkbook_(satellite, checkIn, masterId) {
 
   // Push satellite script (archive viewer menu)
   pushSatelliteScript_(satellite, checkIn.name, masterId);
+}
+
+
+/**
+ * Reformats an existing satellite workbook's Check-In sheet to the v2 layout.
+ * Preserves the spreadsheet ID/URL so collaborators keep the same link.
+ * Called during migration of legacy satellites and available as a standalone action.
+ */
+function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
+  const satellite = SpreadsheetApp.openById(satelliteId);
+  let sheet = satellite.getSheetByName('Check-In');
+
+  if (!sheet) {
+    // If no Check-In sheet exists, use the first sheet and rename it
+    sheet = satellite.getSheets()[0];
+    sheet.setName('Check-In');
+  }
+
+  const master = SpreadsheetApp.openById(masterId);
+  const sprintInfo = getCurrentSprintInfo_(master);
+
+  // Clear the entire sheet to start fresh with v2 layout
+  sheet.clear();
+  sheet.clearFormats();
+  sheet.clearConditionalFormatRules();
+
+  // Remove any existing merges
+  const merges = sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).getMergedRanges();
+  merges.forEach(m => m.breakApart());
+
+  // Remove any existing data validations
+  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).clearDataValidations();
+
+  // Apply the v2 layout (same structure as setupSatelliteWorkbook_)
+  const headerData = [
+    [checkIn.title, '', '', '', '', ''],
+    ['Sprint:', sprintInfo.name, 'Dates:', sprintInfo.dates, '', ''],
+    ['Intent:', sprintInfo.intent, '', '', '', ''],
+    ['Owner:', checkIn.owner || '', '', '', '', ''],
+    ['⚠️ Rows 1-5 synced from Master. Edit below only.', '', '', '', '', ''],
+    ['Meeting Outcomes (today)', '[What must be true when this meeting ends]', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['Agenda', '', '', '', '', ''],
+    ['Topic', 'Owner', 'Prep / Notes', 'Link', 'Priority', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['Decisions', '', '', '', '', ''],
+    ['Decision', 'Owner', 'Impact', 'Follow-up', 'Link', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['Action Items', '', '', '', '', ''],
+    ['Task', 'Owner', 'Due Date', 'Status', 'Link', 'Satellite Source'],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['Parking Lot', '', '', '', '', ''],
+    ['Item', 'Owner', 'Notes', 'Link', '', ''],
+  ];
+
+  sheet.getRange(1, 1, headerData.length, 6).setValues(headerData);
+
+  // Format header section
+  sheet.getRange('A1:F1').merge().setFontSize(16).setFontWeight('bold').setBackground('#1a73e8').setFontColor('white');
+  sheet.getRange('A2:F3').setBackground('#e8f0fe');
+  sheet.getRange('A4:F4').setBackground('#f0f7ff');
+  sheet.getRange('A5:F5').setBackground('#fff3cd').setFontStyle('italic');
+
+  // Format section headers
+  [9, 20, 29, 41].forEach(row => {
+    sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#f1f3f4');
+  });
+
+  // Format table headers
+  [10, 21, 30, 42].forEach(row => {
+    sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#e8eaed');
+  });
+
+  // Set column widths
+  sheet.setColumnWidth(1, 250);
+  sheet.setColumnWidth(2, 150);
+  sheet.setColumnWidth(3, 200);
+  sheet.setColumnWidth(4, 120);
+  sheet.setColumnWidth(5, 100);
+  sheet.setColumnWidth(6, 120);
+
+  // Add dropdowns
+  addCheckInDropdowns_(sheet);
+
+  // Protection for header rows
+  const protection = sheet.getRange('A1:F5').protect();
+  protection.setDescription('Sprint info synced from Master - Do not edit');
+  protection.setWarningOnly(true);
+
+  // Store master reference in satellite's document properties
+  const satProps = PropertiesService.getDocumentProperties();
+  satProps.setProperty('MASTER_ID', masterId);
+  satProps.setProperty('CHECK_IN_TYPE', checkIn.name);
+
+  // Ensure archive sheet exists
+  pushSatelliteScript_(satellite, checkIn.name, masterId);
+}
+
+
+/**
+ * Menu-callable function to reformat existing Curator and Production satellites
+ * to the v2 layout, preserving their URLs/IDs.
+ */
+function reformatExistingSatellites() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
+
+  if (!configSheet) {
+    ui.alert('⚙️ Setup Required', 'Please run Initial Setup first.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const response = ui.alert(
+    '🔄 Reformat Existing Satellites',
+    'This will reformat all existing satellite workbooks to the current v2 layout.\n\n' +
+    'The spreadsheet URLs will NOT change — collaborators keep their same links.\n\n' +
+    'Any existing content in the Check-In sheet will be replaced with the new format.\n\n' +
+    'Continue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) return;
+
+  const masterId = ss.getId();
+  const data = configSheet.getDataRange().getValues();
+  let reformatted = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const checkInName = data[i][0];
+    const satelliteId = data[i][1];
+    if (!satelliteId) continue;
+
+    const checkIn = CONFIG.checkIns.find(c => c.name === checkInName);
+    if (!checkIn || checkIn.type === 'okr') continue;
+
+    try {
+      ss.toast('Reformatting ' + checkInName + '...', '🔄 Reformat', -1);
+      reformatSatelliteToV2_(satelliteId, checkIn, masterId);
+      configSheet.getRange(i + 1, 4).setValue(new Date());
+      configSheet.getRange(i + 1, 5).setValue('Reformatted');
+      reformatted++;
+    } catch (error) {
+      console.error('Failed to reformat ' + checkInName + ': ' + error.message);
+      configSheet.getRange(i + 1, 5).setValue('Reformat Error');
+    }
+  }
+
+  ss.toast('Reformatted ' + reformatted + ' satellite workbooks', '✅ Done', 5);
+  ui.alert('✅ Reformat Complete', reformatted + ' satellite workbooks have been reformatted to the v2 layout.\n\nAll URLs remain the same.', ui.ButtonSet.OK);
 }
 
 
