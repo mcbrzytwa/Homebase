@@ -2855,7 +2855,7 @@ function createFullYearTimelineSheet_(ss) {
   // Title
   sheet.getRange('A1').setValue('📅 CCAT Full Year Timeline (FY2027)');
   sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
-  sheet.getRange('A2').setValue('Last updated: ' + new Date().toLocaleString() + '  |  ⏳ = Date is TBD (placed at estimated month)');
+  sheet.getRange('A2').setValue('Last updated: ' + new Date().toLocaleString() + '  |  ✅ = Complete  |  ⏳ = Date is TBD (placed at estimated month)  |  Dates shown for confirmed milestones');
   sheet.getRange('A2').setFontStyle('italic').setFontColor('#666');
 
   // Months: Mar 2026 through Jun 2027 (16 months)
@@ -2903,67 +2903,68 @@ function createFullYearTimelineSheet_(ss) {
   }
 
   // ---- PRE-POPULATED MILESTONES FROM YANA DECK + TRANSCRIPT ----
-  // Each milestone: [category, monthIndex (0-based in months array), label, isTBD]
+  // Each milestone: [category, monthIndex (0-based in months array), label, isTBD, complete]
+  // Set complete: true when a milestone is done — it will show ✅ with green background
   const milestones = [
     // HIRING
     { cat: '👥 Hiring', items: [
-      { month: 0, label: 'Phase 1: Internal JD Approval (By Mar 13)', tbd: false },
-      { month: 0, label: 'Phase 2: Finalize & Post JDs (By Mar 20)', tbd: false },
-      { month: 0, label: 'Phase 3: Open Search Window (Mar 20 – Apr 27)', tbd: false },
-      { month: 1, label: 'Phase 3 continues (Mar 20 – Apr 27)', tbd: false },
-      { month: 1, label: 'Phase 4: Close Search (Week of Apr 28)', tbd: false },
-      { month: 2, label: 'Phase 5: Interviews (May 12 – May 23)', tbd: false },
-      { month: 2, label: '⏳ Directors of ML + Moving Image Appointed', tbd: true },
-      { month: 3, label: '⏳ Full Team in Place', tbd: true },
+      { month: 0, label: 'Phase 1: Internal JD Approval (By Mar 13)', tbd: false, complete: true },
+      { month: 0, label: 'Phase 2: Finalize & Post JDs (By Mar 20)', tbd: false, complete: false },
+      { month: 0, label: 'Phase 3: Open Search Window (Mar 20 – Apr 27)', tbd: false, complete: false },
+      { month: 1, label: 'Phase 3 continues (Mar 20 – Apr 27)', tbd: false, complete: false },
+      { month: 1, label: 'Phase 4: Close Search (Week of Apr 28)', tbd: false, complete: false },
+      { month: 2, label: 'Phase 5: Interviews (May 12 – May 23)', tbd: false, complete: false },
+      { month: 2, label: '⏳ Directors of ML + Moving Image Appointed', tbd: true, complete: false },
+      { month: 3, label: '⏳ Full Team in Place', tbd: true, complete: false },
     ]},
     // BUDGET & GOVERNANCE
     { cat: '💰 Budget & Governance', items: [
-      { month: 0, label: 'Dedicated Budget Meeting (Financial deep-dive w/ Chanel)', tbd: false },
-      { month: 0, label: 'Budget Refinement (Advancement + ED)', tbd: false },
-      { month: 1, label: '⏳ Budget Proposal for Speaker Series + Visiting Artists', tbd: true },
+      { month: 0, label: 'Dedicated Budget Meeting (Financial deep-dive w/ Chanel)', tbd: false, complete: true },
+      { month: 0, label: 'Budget Refinement (Advancement + ED)', tbd: false, complete: false },
+      { month: 1, label: '⏳ Budget Proposal for Speaker Series + Visiting Artists', tbd: true, complete: false },
     ]},
     // BUILDING & FACILITIES
     { cat: '🏗️ Building (BB6)', items: [
-      { month: 0, label: 'BB6 Equipment Plan (ED + IT)', tbd: false },
-      { month: 0, label: 'Itemized Equipment List (Deliverable)', tbd: false },
-      { month: 0, label: 'Facilities / IT Status Meeting for Advancement', tbd: false },
-      { month: 0, label: 'Mar 24: Architect Visit to CalArts', tbd: false },
-      { month: 2, label: '⏳ BB6 Construction Handover (End of May target)', tbd: true },
-      { month: 3, label: 'BB6 Complete (Hard Deadline)', tbd: false },
+      { month: 0, label: 'BB6 Equipment Plan (ED + IT)', tbd: false, complete: false },
+      { month: 0, label: 'Itemized Equipment List (Deliverable)', tbd: false, complete: false },
+      { month: 0, label: 'Facilities / IT Status Meeting for Advancement', tbd: false, complete: false },
+      { month: 0, label: 'Mar 24: Architect Visit to CalArts', tbd: false, complete: false },
+      { month: 2, label: '⏳ BB6 Construction Handover (End of May target)', tbd: true, complete: false },
+      { month: 3, label: 'BB6 Complete (Hard Deadline)', tbd: false, complete: false },
     ]},
     // EVENTS & PROGRAMMING
     { cat: '🎪 Events & Programming', items: [
-      { month: 1, label: 'Apr 9: Mashinka Firenzi Hakopian (Speaker Series #2)', tbd: false },
-      { month: 1, label: 'Apr 9: IDEA Grant Event — Algorithmic Justice in the Wild', tbd: false },
-      { month: 4, label: '⏳ Orientation Event (Speaker Series #3) — Open House + Demos', tbd: true },
-      { month: 5, label: '⏳ Faculty/Staff Open House & Center Walkthrough', tbd: true },
-      { month: 5, label: '⏳ Ribbon Cutting / Center Launch', tbd: true },
-      { month: 6, label: '⏳ Fall Programming with Visiting Artists', tbd: true },
+      { month: 1, label: 'Apr 9: Mashinka Firenzi Hakopian (Speaker Series #2)', tbd: false, complete: false },
+      { month: 1, label: 'Apr 9: IDEA Grant Event — Algorithmic Justice in the Wild', tbd: false, complete: false },
+      { month: 4, label: '⏳ Orientation Event (Speaker Series #3) — Open House + Demos', tbd: true, complete: false },
+      { month: 5, label: '⏳ Faculty/Staff Open House & Center Walkthrough', tbd: true, complete: false },
+      { month: 5, label: '⏳ Ribbon Cutting / Center Launch', tbd: true, complete: false },
+      { month: 6, label: '⏳ Fall Programming with Visiting Artists', tbd: true, complete: false },
     ]},
     // CURATION & RESEARCH
     { cat: '🎨 Curation & Research', items: [
-      { month: 1, label: '⏳ Lumi LA Visit — Studio Visits + Budget/Curation Model', tbd: true },
-      { month: 2, label: '⏳ Research Agendas Defined', tbd: true },
-      { month: 2, label: '⏳ Faculty Fellow Selection Begins', tbd: true },
-      { month: 3, label: '⏳ Discovery Tour (ED + Curator)', tbd: true },
-      { month: 3, label: '⏳ Fellowship Framework Launched', tbd: true },
-      { month: 6, label: '⏳ Research Agenda Launch', tbd: true },
-      { month: 6, label: '⏳ Year 2 Research + Artist Program Revealed', tbd: true },
+      { month: 1, label: '⏳ Lumi LA Visit — Studio Visits + Budget/Curation Model', tbd: true, complete: false },
+      { month: 2, label: '⏳ Research Agendas Defined', tbd: true, complete: false },
+      { month: 2, label: '⏳ Faculty Fellow Selection Begins', tbd: true, complete: false },
+      { month: 3, label: '⏳ Discovery Tour (ED + Curator)', tbd: true, complete: false },
+      { month: 3, label: '⏳ Fellowship Framework Launched', tbd: true, complete: false },
+      { month: 6, label: '⏳ Research Agenda Launch', tbd: true, complete: false },
+      { month: 6, label: '⏳ Year 2 Research + Artist Program Revealed', tbd: true, complete: false },
     ]},
     // COMMUNICATIONS & REPORTING
     { cat: '📣 Reporting & Deliverables', items: [
-      { month: 0, label: 'Tech Notes + Takeaways Shared with Yana, Ravi, Provost', tbd: false },
-      { month: 0, label: 'Mar 27: Presentation to Yana Peel', tbd: false },
-      { month: 0, label: 'Due Mar 20: Preliminary Plan for MC/Lumi Discovery Tour', tbd: false },
-      { month: 0, label: 'Due Mar 20: Fall Programming with Artists Plan', tbd: false },
-      { month: 4, label: '⏳ Full Team Announcement', tbd: true },
-      { month: 12, label: '⏳ Symposium and White Paper (CCAT Major Contribution)', tbd: true },
+      { month: 0, label: 'Tech Notes + Takeaways Shared with Yana, Ravi, Provost', tbd: false, complete: true },
+      { month: 0, label: 'Mar 27: Presentation to Yana Peel', tbd: false, complete: false },
+      { month: 0, label: 'Due Mar 20: Preliminary Plan for MC/Lumi Discovery Tour', tbd: false, complete: false },
+      { month: 0, label: 'Due Mar 20: Fall Programming with Artists Plan', tbd: false, complete: false },
+      { month: 4, label: '⏳ Full Team Announcement', tbd: true, complete: false },
+      { month: 12, label: '⏳ Symposium and White Paper (CCAT Major Contribution)', tbd: true, complete: false },
     ]},
     // ACADEMIC CALENDAR
     { cat: '🎓 Academic Calendar', items: [
-      { month: 2, label: 'May 15: CalArts Graduation', tbd: false },
-      { month: 5, label: '⏳ New Student Orientation (Mid-Aug → Early Sep)', tbd: true },
-      { month: 5, label: '⏳ Faculty In-Service Days (Early Aug)', tbd: true },
+      { month: 2, label: 'May 15: CalArts Graduation', tbd: false, complete: false },
+      { month: 5, label: '⏳ New Student Orientation (Mid-Aug → Early Sep)', tbd: true, complete: false },
+      { month: 5, label: '⏳ Faculty In-Service Days (Early Aug)', tbd: true, complete: false },
     ]},
   ];
 
@@ -2977,17 +2978,33 @@ function createFullYearTimelineSheet_(ss) {
 
     section.items.forEach(item => {
       sheet.getRange(currentRow, 1).setValue(item.label);
-      if (item.tbd) {
+      if (item.complete) {
+        sheet.getRange(currentRow, 1).setFontColor('#2E7D32');
+      } else if (item.tbd) {
         sheet.getRange(currentRow, 1).setFontColor('#9C27B0');
       }
       // Place marker in the correct month column
       const markerCol = item.month + 2;
       if (markerCol <= headerRow.length) {
-        const marker = item.tbd ? '⏳' : '🎯';
-        sheet.getRange(currentRow, markerCol).setValue(marker).setHorizontalAlignment('center').setFontSize(12);
-        // Light highlight across that cell
-        const bgColor = item.tbd ? '#F3E5F5' : '#E3F2FD';
-        sheet.getRange(currentRow, markerCol).setBackground(bgColor);
+        let marker, bgColor;
+        if (item.complete) {
+          marker = '✅';
+          bgColor = '#C8E6C9';
+        } else if (item.tbd) {
+          marker = '⏳';
+          bgColor = '#F3E5F5';
+        } else {
+          // Extract date from label for confirmed milestones (e.g. "Mar 13", "Apr 9", "May 12 – May 23")
+          const dateMatch = item.label.match(/(?:By\s+)?((?:Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2})/i);
+          marker = dateMatch ? dateMatch[1] : '🎯';
+          bgColor = '#E3F2FD';
+        }
+        const cell = sheet.getRange(currentRow, markerCol);
+        cell.setValue(marker).setHorizontalAlignment('center').setBackground(bgColor);
+        cell.setFontSize(marker.length <= 3 ? 12 : 9);
+        if (marker !== '⏳' && marker !== '✅' && marker !== '🎯') {
+          cell.setFontWeight('bold').setFontColor('#1565C0');
+        }
       }
       currentRow++;
     });
@@ -2998,7 +3015,7 @@ function createFullYearTimelineSheet_(ss) {
   // Format
   sheet.setColumnWidth(1, 380);
   for (let c = 2; c <= headerRow.length; c++) {
-    sheet.setColumnWidth(c, 75);
+    sheet.setColumnWidth(c, 85);
   }
   sheet.setFrozenRows(5);
   sheet.setFrozenColumns(1);
