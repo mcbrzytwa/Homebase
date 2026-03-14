@@ -56,7 +56,7 @@ const CONFIG = {
   // Fields: name (unique key), activeSheet (tab name in master), title (workbook title),
   //         type ('checkin' or 'okr'), owner (display name), preserveLink (keep existing satellite ID)
   checkIns: [
-    { name: 'Production', activeSheet: 'Production Sync ', title: 'CCAT Production Check-In', type: 'checkin', owner: 'Richard Lonsdorf', preserveLink: true },
+    { name: 'Production', activeSheet: 'Production Sync ', title: 'CCAT Production Check-In', type: 'checkin', owner: 'Richard Lonsdorf', preserveLink: true, legacyName: 'Production' },
     { name: 'Curator', activeSheet: 'Curator Check-In', title: 'CCAT Curator Check-In', type: 'checkin', owner: 'Lumi Tan', preserveLink: true, legacyName: 'Student Life' },
     { name: 'Internal Stakeholders', activeSheet: 'Internal Stakeholders Check-In', title: 'Internal Stakeholders Check-In', type: 'checkin', owner: 'All Directors', preserveLink: true, legacyName: 'IT' },
     { name: 'Director ML', activeSheet: 'Director ML Check-In', title: 'Director ML Check-In', type: 'checkin', owner: 'TBD (Director, ML)', preserveLink: false },
@@ -504,13 +504,43 @@ function createSatelliteWorkbooks_() {
     }
     
     // For satellites that should preserve their links (Production, Curator, Internal Stakeholders),
-    // check if they exist under legacy names in the config
-    if (checkIn.preserveLink && checkIn.legacyName) {
-      const legacyId = findLegacySatelliteId_(ss, checkIn.legacyName);
-      if (legacyId) {
-        configSheet.getRange(row, 2).setValue(legacyId);
+    // first check if they exist under legacy names in the config, then prompt user for URL
+    if (checkIn.preserveLink) {
+      let existingSatId = null;
+
+      // Try legacy name lookup first
+      if (checkIn.legacyName) {
+        existingSatId = findLegacySatelliteId_(ss, checkIn.legacyName);
+      }
+
+      // If not found via legacy, prompt the user for the existing satellite URL
+      if (!existingSatId) {
+        const ui = SpreadsheetApp.getUi();
+        const promptResult = ui.prompt(
+          '🔗 Existing Satellite — ' + checkIn.name,
+          'This satellite is marked to preserve its existing link.\n\n' +
+          'Please paste the URL of the existing "' + checkIn.name + '" satellite workbook.\n' +
+          'The URL will stay the same and the workbook will be reformatted to the new layout.\n\n' +
+          'Leave blank or click Cancel to create a new workbook instead.',
+          ui.ButtonSet.OK_CANCEL
+        );
+        if (promptResult.getSelectedButton() === ui.Button.OK && promptResult.getResponseText().trim()) {
+          const url = promptResult.getResponseText().trim();
+          // Extract spreadsheet ID from URL (handles /d/ID/ pattern)
+          const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+          if (idMatch) {
+            existingSatId = idMatch[1];
+          } else {
+            // Treat the whole input as an ID
+            existingSatId = url;
+          }
+        }
+      }
+
+      if (existingSatId) {
+        configSheet.getRange(row, 2).setValue(existingSatId);
         try {
-          const legacySat = SpreadsheetApp.openById(legacyId);
+          const legacySat = SpreadsheetApp.openById(existingSatId);
           configSheet.getRange(row, 3).setValue(legacySat.getUrl());
           configSheet.getRange(row, 4).setValue(new Date());
           configSheet.getRange(row, 5).setValue('Migrated');
@@ -519,10 +549,11 @@ function createSatelliteWorkbooks_() {
           const satName = 'CCAT Check-In — ' + checkIn.name;
           legacySat.rename(satName);
 
-          // Reformat the satellite to v2 layout (preserves URL, updates structure)
-          reformatSatelliteToV2_(legacyId, checkIn, ss.getId());
+          // Reformat the satellite to v2 layout (preserves URL, repopulates data)
+          reformatSatelliteToV2_(existingSatId, checkIn, ss.getId());
         } catch (e) {
-          console.error('Could not migrate legacy satellite: ' + e.message);
+          console.error('Could not migrate satellite: ' + e.message);
+          configSheet.getRange(row, 5).setValue('Migration Error: ' + e.message);
         }
         return;
       }
@@ -693,6 +724,9 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   const master = SpreadsheetApp.openById(masterId);
   const sprintInfo = getCurrentSprintInfo_(master);
 
+  // ── Extract existing data before clearing ──
+  const existingData = extractSatelliteData_(sheet);
+
   // Clear the entire sheet to start fresh with v2 layout
   sheet.clear();
   sheet.clearFormats();
@@ -705,53 +739,59 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   // Remove any existing data validations
   sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).clearDataValidations();
 
-  // Apply the v2 layout (same structure as setupSatelliteWorkbook_)
+  // Build v2 layout with repopulated data
+  const MIN_AGENDA = 9;
+  const MIN_DECISIONS = 7;
+  const MIN_ACTIONS = 10;
+  const MIN_PARKING = 5;
+
+  const agendaRows = padRows_(existingData.agenda, MIN_AGENDA, 5);
+  const decisionRows = padRows_(existingData.decisions, MIN_DECISIONS, 5);
+  const actionRows = padRows_(existingData.actions, MIN_ACTIONS, 6);
+  const parkingRows = padRows_(existingData.parking, MIN_PARKING, 4);
+
   const headerData = [
     [checkIn.title, '', '', '', '', ''],
     ['Sprint:', sprintInfo.name, 'Dates:', sprintInfo.dates, '', ''],
     ['Intent:', sprintInfo.intent, '', '', '', ''],
     ['Owner:', checkIn.owner || '', '', '', '', ''],
     ['⚠️ Rows 1-5 synced from Master. Edit below only.', '', '', '', '', ''],
-    ['Meeting Outcomes (today)', '[What must be true when this meeting ends]', '', '', '', ''],
+    ['Meeting Outcomes (today)', existingData.meetingOutcome || '[What must be true when this meeting ends]', '', '', '', ''],
     ['', '', '', '', '', ''],
     ['', '', '', '', '', ''],
     ['Agenda', '', '', '', '', ''],
     ['Topic', 'Owner', 'Prep / Notes', 'Link', 'Priority', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['Decisions', '', '', '', '', ''],
-    ['Decision', 'Owner', 'Impact', 'Follow-up', 'Link', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['Action Items', '', '', '', '', ''],
-    ['Task', 'Owner', 'Due Date', 'Status', 'Link', 'Satellite Source'],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['Parking Lot', '', '', '', '', ''],
-    ['Item', 'Owner', 'Notes', 'Link', '', ''],
   ];
 
+  // Add agenda rows
+  agendaRows.forEach(r => headerData.push(padTo6_(r)));
+
+  // Decisions section
+  headerData.push(['Decisions', '', '', '', '', '']);
+  headerData.push(['Decision', 'Owner', 'Impact', 'Follow-up', 'Link', '']);
+  decisionRows.forEach(r => headerData.push(padTo6_(r)));
+
+  // Action Items section
+  headerData.push(['Action Items', '', '', '', '', '']);
+  headerData.push(['Task', 'Owner', 'Due Date', 'Status', 'Link', 'Satellite Source']);
+  actionRows.forEach(r => headerData.push(padTo6_(r)));
+
+  // Parking Lot section
+  headerData.push(['Parking Lot', '', '', '', '', '']);
+  headerData.push(['Item', 'Owner', 'Notes', 'Link', '', '']);
+  parkingRows.forEach(r => headerData.push(padTo6_(r)));
+
   sheet.getRange(1, 1, headerData.length, 6).setValues(headerData);
+
+  // Calculate dynamic section row positions
+  const agendaSectionRow = 9;
+  const agendaHeaderRow = 10;
+  const decisionsSectionRow = agendaHeaderRow + agendaRows.length + 1;
+  const decisionsHeaderRow = decisionsSectionRow + 1;
+  const actionsSectionRow = decisionsHeaderRow + decisionRows.length + 1;
+  const actionsHeaderRow = actionsSectionRow + 1;
+  const parkingSectionRow = actionsHeaderRow + actionRows.length + 1;
+  const parkingHeaderRow = parkingSectionRow + 1;
 
   // Format header section
   sheet.getRange('A1:F1').merge().setFontSize(16).setFontWeight('bold').setBackground('#1a73e8').setFontColor('white');
@@ -760,12 +800,12 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   sheet.getRange('A5:F5').setBackground('#fff3cd').setFontStyle('italic');
 
   // Format section headers
-  [9, 20, 29, 41].forEach(row => {
+  [agendaSectionRow, decisionsSectionRow, actionsSectionRow, parkingSectionRow].forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#f1f3f4');
   });
 
   // Format table headers
-  [10, 21, 30, 42].forEach(row => {
+  [agendaHeaderRow, decisionsHeaderRow, actionsHeaderRow, parkingHeaderRow].forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#e8eaed');
   });
 
@@ -777,8 +817,15 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   sheet.setColumnWidth(5, 100);
   sheet.setColumnWidth(6, 120);
 
-  // Add dropdowns
-  addCheckInDropdowns_(sheet);
+  // Add dropdowns with dynamic row positions
+  addCheckInDropdowns_(sheet, {
+    agendaHeaderRow: agendaHeaderRow,
+    decisionsSectionRow: decisionsSectionRow,
+    decisionsHeaderRow: decisionsHeaderRow,
+    actionsSectionRow: actionsSectionRow,
+    actionsHeaderRow: actionsHeaderRow,
+    parkingSectionRow: parkingSectionRow,
+  });
 
   // Protection for header rows
   const protection = sheet.getRange('A1:F5').protect();
@@ -792,6 +839,95 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
 
   // Ensure archive sheet exists
   pushSatelliteScript_(satellite, checkIn.name, masterId);
+}
+
+
+/**
+ * Extracts existing data from a satellite sheet by finding section headers.
+ * Works with both old-format and v2-format sheets.
+ * Looks for sections: Agenda, Decisions, Action Items, Parking Lot
+ */
+function extractSatelliteData_(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = Math.max(sheet.getLastColumn(), 6);
+  if (lastRow < 1) return { agenda: [], decisions: [], actions: [], parking: [], meetingOutcome: '' };
+
+  const allData = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+
+  // Find section start rows by scanning column A for keywords
+  let agendaStart = -1, decisionsStart = -1, actionsStart = -1, parkingStart = -1;
+  let meetingOutcome = '';
+
+  for (let i = 0; i < allData.length; i++) {
+    const cellA = String(allData[i][0]).trim().toLowerCase();
+    const cellB = String(allData[i][1]).trim();
+
+    if (cellA === 'meeting outcomes (today)' || cellA === 'meeting outcomes' || cellA.indexOf('meeting outcome') === 0) {
+      meetingOutcome = cellB;
+    } else if (cellA === 'agenda') {
+      agendaStart = i;
+    } else if (cellA === 'decisions') {
+      decisionsStart = i;
+    } else if (cellA === 'action items' || cellA === 'action item') {
+      actionsStart = i;
+    } else if (cellA === 'parking lot') {
+      parkingStart = i;
+    }
+  }
+
+  // Helper: extract data rows between a section header and the next section
+  function extractSection(startIdx, colCount) {
+    if (startIdx < 0) return [];
+    // Skip the section title row and the column header row (2 rows)
+    const dataStart = startIdx + 2;
+    // Find the end: next section or end of data
+    let endIdx = allData.length;
+    [agendaStart, decisionsStart, actionsStart, parkingStart].forEach(s => {
+      if (s > startIdx && s < endIdx) endIdx = s;
+    });
+
+    const rows = [];
+    for (let i = dataStart; i < endIdx; i++) {
+      const row = allData[i].slice(0, colCount);
+      // Only include rows that have at least one non-empty cell
+      if (row.some(cell => String(cell).trim() !== '')) {
+        rows.push(row);
+      }
+    }
+    return rows;
+  }
+
+  return {
+    meetingOutcome: meetingOutcome,
+    agenda: extractSection(agendaStart, 5),       // Topic, Owner, Prep/Notes, Link, Priority
+    decisions: extractSection(decisionsStart, 5),  // Decision, Owner, Impact, Follow-up, Link
+    actions: extractSection(actionsStart, 6),       // Task, Owner, Due Date, Status, Link, Source
+    parking: extractSection(parkingStart, 4),       // Item, Owner, Notes, Link
+  };
+}
+
+
+/**
+ * Pads an array of rows to at least minRows with empty rows of colCount columns.
+ */
+function padRows_(rows, minRows, colCount) {
+  const result = rows.slice();
+  while (result.length < minRows) {
+    result.push(new Array(colCount).fill(''));
+  }
+  return result;
+}
+
+
+/**
+ * Pads a row array to exactly 6 columns (our standard column count).
+ */
+function padTo6_(row) {
+  const result = row.slice(0, 6);
+  while (result.length < 6) {
+    result.push('');
+  }
+  return result;
 }
 
 
@@ -849,35 +985,43 @@ function reformatExistingSatellites() {
 }
 
 
-function addCheckInDropdowns_(sheet) {
-  // Status dropdown for Action Items (Column D, rows 31-40)
+function addCheckInDropdowns_(sheet, sectionRows) {
+  // Default row positions for fixed v2 layout (used by setupSatelliteWorkbook_)
+  const agendaDataStart = (sectionRows && sectionRows.agendaHeaderRow ? sectionRows.agendaHeaderRow : 10) + 1;
+  const agendaDataEnd = (sectionRows && sectionRows.decisionsSectionRow ? sectionRows.decisionsSectionRow : 20) - 1;
+  const decisionsDataStart = (sectionRows && sectionRows.decisionsHeaderRow ? sectionRows.decisionsHeaderRow : 21) + 1;
+  const decisionsDataEnd = (sectionRows && sectionRows.actionsSectionRow ? sectionRows.actionsSectionRow : 29) - 1;
+  const actionsDataStart = (sectionRows && sectionRows.actionsHeaderRow ? sectionRows.actionsHeaderRow : 30) + 1;
+  const actionsDataEnd = (sectionRows && sectionRows.parkingSectionRow ? sectionRows.parkingSectionRow : 41) - 1;
+
+  // Status dropdown for Action Items (Column D)
   const statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(CONFIG.dropdownOptions.actionStatus, true)
     .setAllowInvalid(false)
     .build();
-  sheet.getRange('D31:D40').setDataValidation(statusRule);
-  
-  // Priority dropdown for Agenda items (Column E, rows 11-19)
+  sheet.getRange(actionsDataStart, 4, actionsDataEnd - actionsDataStart + 1, 1).setDataValidation(statusRule);
+
+  // Priority dropdown for Agenda items (Column E)
   const priorityRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(CONFIG.dropdownOptions.priority, true)
     .setAllowInvalid(true)
     .build();
-  sheet.getRange('E11:E19').setDataValidation(priorityRule);
-  
-  // Impact dropdown for Decisions (Column C, rows 22-28)
+  sheet.getRange(agendaDataStart, 5, agendaDataEnd - agendaDataStart + 1, 1).setDataValidation(priorityRule);
+
+  // Impact dropdown for Decisions (Column C)
   const impactRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['High', 'Medium', 'Low'], true)
     .setAllowInvalid(true)
     .build();
-  sheet.getRange('C22:C28').setDataValidation(impactRule);
-  
-  // Due Date for Action Items (Column C, rows 31-40)
+  sheet.getRange(decisionsDataStart, 3, decisionsDataEnd - decisionsDataStart + 1, 1).setDataValidation(impactRule);
+
+  // Due Date for Action Items (Column C)
   const dateRule = SpreadsheetApp.newDataValidation()
     .requireDate()
     .setAllowInvalid(true)
     .build();
-  sheet.getRange('C31:C40').setDataValidation(dateRule);
-  sheet.getRange('C31:C40').setNumberFormat('mmm d, yyyy');
+  sheet.getRange(actionsDataStart, 3, actionsDataEnd - actionsDataStart + 1, 1).setDataValidation(dateRule);
+  sheet.getRange(actionsDataStart, 3, actionsDataEnd - actionsDataStart + 1, 1).setNumberFormat('mmm d, yyyy');
 }
 
 
