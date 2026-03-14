@@ -1055,7 +1055,7 @@ function addCheckInDropdowns_(sheet, sectionRows) {
   // Status dropdown for Action Items (Column D)
   const statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(CONFIG.dropdownOptions.actionStatus, true)
-    .setAllowInvalid(false)
+    .setAllowInvalid(true)
     .build();
   sheet.getRange(actionsDataStart, 4, actionsDataEnd - actionsDataStart + 1, 1).setDataValidation(statusRule);
 
@@ -1168,8 +1168,9 @@ function writeSectionData_(sheet, bounds, rows, minRows) {
     sheet.deleteRows(bounds.end + delta + 1, -delta);
   }
 
-  // Clear the section data area (now correctly sized)
-  sheet.getRange(bounds.start, 1, targetCount, 6).clearContent();
+  // Clear data and stale validation so programmatic writes always succeed
+  const dataRange = sheet.getRange(bounds.start, 1, targetCount, 6);
+  dataRange.clearContent().clearDataValidations();
 
   // Write data
   if (rows.length > 0) {
@@ -1180,6 +1181,13 @@ function writeSectionData_(sheet, bounds, rows, minRows) {
     });
     sheet.getRange(bounds.start, 1, padded.length, 6).setValues(padded);
   }
+
+  // Re-apply status dropdown on column D (Action Items) with allowInvalid
+  const statusRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(CONFIG.dropdownOptions.actionStatus, true)
+    .setAllowInvalid(true)
+    .build();
+  sheet.getRange(bounds.start, 4, targetCount, 1).setDataValidation(statusRule);
 
   return delta;
 }
