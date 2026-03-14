@@ -93,7 +93,9 @@ const CONFIG = {
     status: ['Not Started', 'In Progress', 'Complete', 'Blocked'],
     confidence: ['High', 'Medium', 'Low'],
     category: ['Event', 'Update', 'Comms', 'Key Milestone'],
-    actionStatus: ['Not Started', 'In Progress', 'Complete', 'Blocked', 'Pending', 'Carried Over']
+    actionStatus: ['Not Started', 'In Progress', 'Complete', 'Blocked', 'Pending', 'Carried Over'],
+    sprintDueDate: ['This Sprint', 'Next Sprint', '+2 Sprints', '+3 Sprints', '+4 Sprints', '+5 Sprints'],
+    raciFunctions: ["President's Office", 'Advancement', 'Production', 'Curator', 'ED', 'CHANEL', 'Provost', 'BB6', 'Research']
   },
   
   // Colors for quarter shading (calendar year, for OKR sheet)
@@ -656,28 +658,35 @@ function setupSatelliteWorkbook_(satellite, checkIn, masterId) {
     ['', '', '', '', '', ''],
     ['', '', '', '', '', ''],
     ['', '', '', '', '', ''],
+    ['RACI', '', '', '', '', ''],
+    ['Role', 'Responsible', 'Accountable', 'Consulted', 'Informed', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
     ['Parking Lot', '', '', '', '', ''],
     ['Item', 'Owner', 'Notes', 'Link', '', ''],
   ];
-  
+
   sheet.getRange(1, 1, headerData.length, 6).setValues(headerData);
-  
+
   // Format header section
   sheet.getRange('A1:F1').merge().setFontSize(16).setFontWeight('bold').setBackground('#1a73e8').setFontColor('white');
   sheet.getRange('A2:F3').setBackground('#e8f0fe');
   sheet.getRange('A4:F4').setBackground('#f0f7ff');
   sheet.getRange('A5:F5').setBackground('#fff3cd').setFontStyle('italic');
-  
-  // Format section headers
-  [9, 20, 29, 41].forEach(row => {
+
+  // Format section headers (Agenda=9, Decisions=20, Actions=29, RACI=41, Parking=48)
+  [9, 20, 29, 41, 48].forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#f1f3f4');
   });
-  
+
   // Format table headers
-  [10, 21, 30, 42].forEach(row => {
+  [10, 21, 30, 42, 49].forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#e8eaed');
   });
-  
+
   // Set column widths
   sheet.setColumnWidth(1, 250);
   sheet.setColumnWidth(2, 150);
@@ -685,9 +694,17 @@ function setupSatelliteWorkbook_(satellite, checkIn, masterId) {
   sheet.setColumnWidth(4, 120);
   sheet.setColumnWidth(5, 100);
   sheet.setColumnWidth(6, 120);
-  
-  // Add dropdowns
-  addCheckInDropdowns_(sheet);
+
+  // Add dropdowns (with RACI row positions)
+  addCheckInDropdowns_(sheet, {
+    agendaHeaderRow: 10,
+    decisionsSectionRow: 20,
+    decisionsHeaderRow: 21,
+    actionsSectionRow: 29,
+    actionsHeaderRow: 30,
+    raciHeaderRow: 42,
+    parkingSectionRow: 48,
+  });
   
   // Protection for header rows
   const protection = sheet.getRange('A1:F5').protect();
@@ -751,7 +768,6 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   const actionRows = padRows_(existingData.actions, MIN_ACTIONS, 6);
   const raciRows = padRows_(existingData.raci, MIN_RACI, 5);
   const parkingRows = padRows_(existingData.parking, MIN_PARKING, 4);
-  const hasRaci = existingData.raci && existingData.raci.length > 0;
 
   const headerData = [
     [checkIn.title, '', '', '', '', ''],
@@ -779,12 +795,10 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   headerData.push(['Task', 'Owner', 'Due Date', 'Status', 'Link', 'Satellite Source']);
   actionRows.forEach(r => headerData.push(padTo6_(r)));
 
-  // RACI section (only included if the old sheet had one)
-  if (hasRaci) {
-    headerData.push(['RACI', '', '', '', '', '']);
-    headerData.push(['Role', 'Responsible', 'Accountable', 'Consulted', 'Informed', '']);
-    raciRows.forEach(r => headerData.push(padTo6_(r)));
-  }
+  // RACI section (always included in v2 layout)
+  headerData.push(['RACI', '', '', '', '', '']);
+  headerData.push(['Role', 'Responsible', 'Accountable', 'Consulted', 'Informed', '']);
+  raciRows.forEach(r => headerData.push(padTo6_(r)));
 
   // Parking Lot section
   headerData.push(['Parking Lot', '', '', '', '', '']);
@@ -800,14 +814,9 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   const decisionsHeaderRow = decisionsSectionRow + 1;
   const actionsSectionRow = decisionsHeaderRow + decisionRows.length + 1;
   const actionsHeaderRow = actionsSectionRow + 1;
-  let raciSectionRow = -1, raciHeaderRow = -1;
-  let nextAfterActions = actionsHeaderRow + actionRows.length + 1;
-  if (hasRaci) {
-    raciSectionRow = nextAfterActions;
-    raciHeaderRow = raciSectionRow + 1;
-    nextAfterActions = raciHeaderRow + raciRows.length + 1;
-  }
-  const parkingSectionRow = nextAfterActions;
+  const raciSectionRow = actionsHeaderRow + actionRows.length + 1;
+  const raciHeaderRow = raciSectionRow + 1;
+  const parkingSectionRow = raciHeaderRow + raciRows.length + 1;
   const parkingHeaderRow = parkingSectionRow + 1;
 
   // Format header section
@@ -817,15 +826,13 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   sheet.getRange('A5:F5').setBackground('#fff3cd').setFontStyle('italic');
 
   // Format section headers
-  const sectionHeaderRows = [agendaSectionRow, decisionsSectionRow, actionsSectionRow, parkingSectionRow];
-  if (hasRaci) sectionHeaderRows.push(raciSectionRow);
+  const sectionHeaderRows = [agendaSectionRow, decisionsSectionRow, actionsSectionRow, raciSectionRow, parkingSectionRow];
   sectionHeaderRows.forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#f1f3f4');
   });
 
   // Format table headers
-  const tableHeaderRows = [agendaHeaderRow, decisionsHeaderRow, actionsHeaderRow, parkingHeaderRow];
-  if (hasRaci) tableHeaderRows.push(raciHeaderRow);
+  const tableHeaderRows = [agendaHeaderRow, decisionsHeaderRow, actionsHeaderRow, raciHeaderRow, parkingHeaderRow];
   tableHeaderRows.forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#e8eaed');
   });
@@ -845,6 +852,7 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
     decisionsHeaderRow: decisionsHeaderRow,
     actionsSectionRow: actionsSectionRow,
     actionsHeaderRow: actionsHeaderRow,
+    raciHeaderRow: raciHeaderRow,
     parkingSectionRow: parkingSectionRow,
   });
 
@@ -1042,13 +1050,74 @@ function addCheckInDropdowns_(sheet, sectionRows) {
     .build();
   sheet.getRange(decisionsDataStart, 3, decisionsDataEnd - decisionsDataStart + 1, 1).setDataValidation(impactRule);
 
-  // Due Date for Action Items (Column C)
-  const dateRule = SpreadsheetApp.newDataValidation()
-    .requireDate()
-    .setAllowInvalid(true)
+  // Due Date for Action Items (Column C) — sprint-relative options + free text
+  const dueDateRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(CONFIG.dropdownOptions.sprintDueDate, true)
+    .setAllowInvalid(true)  // allows manual date entry too
     .build();
-  sheet.getRange(actionsDataStart, 3, actionsDataEnd - actionsDataStart + 1, 1).setDataValidation(dateRule);
-  sheet.getRange(actionsDataStart, 3, actionsDataEnd - actionsDataStart + 1, 1).setNumberFormat('mmm d, yyyy');
+  sheet.getRange(actionsDataStart, 3, actionsDataEnd - actionsDataStart + 1, 1).setDataValidation(dueDateRule);
+
+  // RACI dropdowns (Columns B-E: Responsible, Accountable, Consulted, Informed)
+  if (sectionRows && sectionRows.raciHeaderRow && sectionRows.raciHeaderRow > 0) {
+    const raciDataStart = sectionRows.raciHeaderRow + 1;
+    const raciDataEnd = (sectionRows.parkingSectionRow || raciDataStart + 5) - 1;
+    const raciRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(CONFIG.dropdownOptions.raciFunctions, true)
+      .setAllowInvalid(true)  // allows custom names not in the list
+      .build();
+    for (let col = 2; col <= 5; col++) {
+      sheet.getRange(raciDataStart, col, raciDataEnd - raciDataStart + 1, 1).setDataValidation(raciRule);
+    }
+  }
+}
+
+
+/**
+ * onEdit trigger: resolves sprint-relative due dates to the 2nd Thursday of that sprint.
+ * When a user selects "This Sprint", "Next Sprint", "+2 Sprints", etc. in an Action Items
+ * Due Date cell, it auto-converts to the actual date (2nd Thursday of that sprint).
+ */
+function onEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  const val = e.value;
+
+  // Only act on sprint-relative dropdown values
+  if (!val || CONFIG.dropdownOptions.sprintDueDate.indexOf(val) === -1) return;
+
+  // Check if this is a Check-In sheet (satellite or master sync sheet) with Action Items
+  // Find the "Action Items" section to confirm this cell is in the due date column (C)
+  if (e.range.getColumn() !== 3) return; // Due Date is always column C
+
+  // Determine sprint offset from selection
+  const sprintOffsetMap = {
+    'This Sprint': 0,
+    'Next Sprint': 1,
+    '+2 Sprints': 2,
+    '+3 Sprints': 3,
+    '+4 Sprints': 4,
+    '+5 Sprints': 5
+  };
+  const offset = sprintOffsetMap[val];
+  if (offset === undefined) return;
+
+  // Get current sprint start date (Monday of current sprint week)
+  const today = new Date();
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
+
+  // Calculate the target sprint's start Monday
+  const targetSprintStart = new Date(startOfWeek);
+  targetSprintStart.setDate(startOfWeek.getDate() + (offset * 14));
+
+  // 2nd Thursday = Thursday of the 2nd week = sprint start + 10 days
+  // Monday(+0) Tue(+1) Wed(+2) Thu(+3) Fri(+4) Sat(+5) Sun(+6)
+  // Mon(+7) Tue(+8) Wed(+9) Thu(+10) Fri(+11) Sat(+12) Sun(+13)
+  const secondThursday = new Date(targetSprintStart);
+  secondThursday.setDate(targetSprintStart.getDate() + 10);
+
+  e.range.setValue(secondThursday);
+  e.range.setNumberFormat('MMM d, yyyy');
 }
 
 
