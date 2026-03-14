@@ -94,7 +94,7 @@ const CONFIG = {
     confidence: ['High', 'Medium', 'Low'],
     category: ['Event', 'Update', 'Comms', 'Key Milestone'],
     actionStatus: ['Not Started', 'In Progress', 'Complete', 'Blocked', 'Pending', 'Carried Over'],
-    sprintDueDate: ['This Sprint', 'Next Sprint', '+2 Sprints', '+3 Sprints', '+4 Sprints', '+5 Sprints'],
+    sprintDueDate: ['This Sprint', 'Next Sprint', '2 Sprints Out', '3 Sprints Out', '4 Sprints Out', '5 Sprints Out'],
     raciFunctions: ["President's Office", 'Advancement', 'Production', 'Curator', 'ED', 'CHANEL', 'Provost', 'BB6', 'Research']
   },
   
@@ -1185,10 +1185,10 @@ function onEdit(e) {
   const sprintOffsetMap = {
     'This Sprint': 0,
     'Next Sprint': 1,
-    '+2 Sprints': 2,
-    '+3 Sprints': 3,
-    '+4 Sprints': 4,
-    '+5 Sprints': 5
+    '2 Sprints Out': 2,
+    '3 Sprints Out': 3,
+    '4 Sprints Out': 4,
+    '5 Sprints Out': 5
   };
   const offset = sprintOffsetMap[val];
   if (offset === undefined) return;
@@ -1226,8 +1226,8 @@ function convertSprintDatesInSatellites() {
 
   const sprintOptions = CONFIG.dropdownOptions.sprintDueDate;
   const sprintOffsetMap = {
-    'This Sprint': 0, 'Next Sprint': 1, '+2 Sprints': 2,
-    '+3 Sprints': 3, '+4 Sprints': 4, '+5 Sprints': 5
+    'This Sprint': 0, 'Next Sprint': 1, '2 Sprints Out': 2,
+    '3 Sprints Out': 3, '4 Sprints Out': 4, '5 Sprints Out': 5
   };
 
   const data = configSheet.getDataRange().getValues();
