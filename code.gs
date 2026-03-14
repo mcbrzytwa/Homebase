@@ -7,17 +7,16 @@
  * 1. Sprint Rollover, Archive & Satellite Distribution (preserved)
  * 2. Simplified OKR Tracking (no RACI/approval/timeline from OKRs)
  * 3. Revised Satellite Workbooks (Production, Curator, Internal Stakeholders,
- *    Director ML, Director MI, Technical Director, Advisory Committee, OKRs)
+ *    Director ML, Director MI, Technical Director, OKRs)
  * 4. One-Way Sync: Satellites → Master RACI Tab
  * 5. Granola Meeting Notes → Auto-Populate Satellite Trackers
  * 6. Action Item Distribution from Internal Stakeholders to other satellites
- * 7. FY2027 Timeline Satellite (Q4 2026 included)
- * 8. Satellite Tracker Archive Access (previous sprints)
- * 9. Sprint Deck Update Push
- * 10. Stakeholder Communication: Meeting summaries + tracker links
- *
- * Advisory Network functionality has been removed from active code.
- * Legacy sheets are preserved for reference.
+ * 7. Full Year Timeline with milestone tracking
+ * 8. Next 6 Sprints — near-term sprint-based planning view
+ * 9. Satellite Tracker Archive Access (previous sprints)
+ * 10. Sprint Deck Update Push
+ * 11. Stakeholder Communication: Meeting summaries + tracker links
+ * 12. README tab with system documentation and how-tos
  * 
  * ============================================================================
  */
@@ -43,28 +42,27 @@ const CONFIG = {
     okrs: '🎯 Objectives and Key Results',
     masterRaci: '📋 Master RACI Tracker',
     satelliteConfig: '⚙️ Satellite Config',
-    timelineConfig: '📅 FY2027 Timeline',
     fullYearTimeline: '📅 Full Year Timeline',
-    next4Weeks: '📅 Next 4 Weeks',
+    next6Sprints: '📅 Next 6 Sprints',
+    readme: '📖 README',
     sprintDeckData: '📊 Sprint Deck Data',
     meetingLog: '📝 Meeting Log',
     timelineChangeLog: '📅 Timeline Change Log',
   },
   
-  // Satellite check-in types — REVISED
-  // Production & Curator keep their existing satellite links
-  // IT has been repurposed as Internal Stakeholders
-  // CHANEL, Deans-Provost, Facilities removed
-  // New: Director ML, Director MI, Technical Director
+  // Satellite check-in types
+  // To add a new satellite: add an entry here with type 'checkin', then run Initial Setup.
+  // The system will automatically create its workbook, sync sheet, nav menu entry, etc.
+  // Fields: name (unique key), activeSheet (tab name in master), title (workbook title),
+  //         type ('checkin' or 'okr'), owner (display name), preserveLink (keep existing satellite ID)
   checkIns: [
-    { name: 'Production', templateSheet: 'Production Sync Template', activeSheet: 'Production Sync ', title: 'CCAT Production Check-In', type: 'checkin', owner: 'Richard Lonsdorf', preserveLink: true },
-    { name: 'Curator', templateSheet: 'Curator Check-In Template', activeSheet: 'Curator Check-In', title: 'CCAT Curator Check-In', type: 'checkin', owner: 'Lumi Tan', preserveLink: true, legacyName: 'Student Life' },
-    { name: 'Internal Stakeholders', templateSheet: 'Internal Stakeholders Template', activeSheet: 'Internal Stakeholders Check-In', title: 'Internal Stakeholders Check-In', type: 'checkin', owner: 'All Directors', preserveLink: true, legacyName: 'IT' },
-    { name: 'Director ML', templateSheet: 'Director ML Template', activeSheet: 'Director ML Check-In', title: 'Director ML Check-In', type: 'checkin', owner: 'TBD (Director, ML)', preserveLink: false },
-    { name: 'Director MI', templateSheet: 'Director MI Template', activeSheet: 'Director MI Check-In', title: 'Director MI Check-In', type: 'checkin', owner: 'TBD (Director, MI)', preserveLink: false },
-    { name: 'Technical Director', templateSheet: 'Technical Director Template', activeSheet: 'Technical Director Check-In', title: 'Technical Director Check-In', type: 'checkin', owner: 'TBD (Technical Director)', preserveLink: false },
-    { name: 'Advisory Committee', templateSheet: 'Advisory Committee', activeSheet: 'Advisory Committee', title: 'Advisory Committee Meetings', type: 'checkin', owner: 'Committee', preserveLink: false },
-    { name: 'OKRs', templateSheet: null, activeSheet: '🎯 Objectives and Key Results', title: 'CCAT 2026 Objectives and Key Results', type: 'okr', owner: 'ED', preserveLink: false },
+    { name: 'Production', activeSheet: 'Production Sync ', title: 'CCAT Production Check-In', type: 'checkin', owner: 'Richard Lonsdorf', preserveLink: true },
+    { name: 'Curator', activeSheet: 'Curator Check-In', title: 'CCAT Curator Check-In', type: 'checkin', owner: 'Lumi Tan', preserveLink: true, legacyName: 'Student Life' },
+    { name: 'Internal Stakeholders', activeSheet: 'Internal Stakeholders Check-In', title: 'Internal Stakeholders Check-In', type: 'checkin', owner: 'All Directors', preserveLink: true, legacyName: 'IT' },
+    { name: 'Director ML', activeSheet: 'Director ML Check-In', title: 'Director ML Check-In', type: 'checkin', owner: 'TBD (Director, ML)', preserveLink: false },
+    { name: 'Director MI', activeSheet: 'Director MI Check-In', title: 'Director MI Check-In', type: 'checkin', owner: 'TBD (Director, MI)', preserveLink: false },
+    { name: 'Technical Director', activeSheet: 'Technical Director Check-In', title: 'Technical Director Check-In', type: 'checkin', owner: 'TBD (Technical Director)', preserveLink: false },
+    { name: 'OKRs', activeSheet: '🎯 Objectives and Key Results', title: 'CCAT 2026 Objectives and Key Results', type: 'okr', owner: 'ED', preserveLink: false },
   ],
   
   // Category emoji mapping
@@ -96,19 +94,6 @@ const CONFIG = {
     confidence: ['High', 'Medium', 'Low'],
     category: ['Event', 'Update', 'Comms', 'Key Milestone'],
     actionStatus: ['Not Started', 'In Progress', 'Complete', 'Blocked', 'Pending', 'Carried Over']
-  },
-  
-  // FY2027 Timeline: Q4 FY2026 (Apr-Jun 2026) + full FY2027 (Jul 2026 - Jun 2027)
-  // CalArts fiscal year runs Jul 1 - Jun 30
-  fy2027Timeline: {
-    label: 'FY2027 Timeline (incl. Q4 FY2026)',
-    quarters: [
-      { name: 'Q4 FY2026', months: ['Apr 2026', 'May 2026', 'Jun 2026'], color: '#F3E5F5' },
-      { name: 'Q1 FY2027', months: ['Jul 2026', 'Aug 2026', 'Sep 2026'], color: '#E3F2FD' },
-      { name: 'Q2 FY2027', months: ['Oct 2026', 'Nov 2026', 'Dec 2026'], color: '#E8F5E9' },
-      { name: 'Q3 FY2027', months: ['Jan 2027', 'Feb 2027', 'Mar 2027'], color: '#FFF3E0' },
-      { name: 'Q4 FY2027', months: ['Apr 2027', 'May 2027', 'Jun 2027'], color: '#F3E5F5' },
-    ]
   },
   
   // Colors for quarter shading (calendar year, for OKR sheet)
@@ -155,10 +140,10 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(ui.createMenu('📅 Timelines')
       .addItem('📅 View Full Year Timeline', 'navToFullYearTimeline')
-      .addItem('📅 View Next 4 Weeks', 'navToNext4Weeks')
+      .addItem('📅 View Next 6 Sprints', 'navToNext6Sprints')
       .addSeparator()
       .addItem('🔄 Refresh Full Year Timeline', 'refreshFullYearTimeline')
-      .addItem('🔄 Refresh Next 4 Weeks', 'refreshNext4Weeks')
+      .addItem('🔄 Refresh Next 6 Sprints', 'refreshNext6Sprints')
       .addSeparator()
       .addItem('📋 View Timeline Change Log', 'navToTimelineChangeLog'))
     .addSeparator()
@@ -189,8 +174,7 @@ function onOpen() {
       .addItem('🚀 Initial Setup (Create Satellites)', 'initialSetup')
       .addItem('🔄 Reformat Existing Satellites to v2', 'reformatExistingSatellites')
       .addItem('🔧 Fix Formula References', 'fixFormulaReferences')
-      .addItem('📅 Setup Timelines (Full Year + 4 Weeks)', 'setupTimelines')
-      .addItem('📅 Setup FY2027 Timeline Satellite', 'setupTimelineSatellite')
+      .addItem('📅 Setup Timelines (Full Year + Next 6 Sprints)', 'setupTimelines')
       .addItem('📝 Update Config Email', 'promptForEmail'))
     .addToUi();
   
@@ -207,12 +191,11 @@ function buildNavigationMenus_(ui) {
   
   // Core sheets
   sheetsMenu.addItem('🏛️ Home Base', 'navToHomeBase');
-  sheetsMenu.addItem('🗂️ OS Legend', 'navToOSLegend');
+  sheetsMenu.addItem('📖 README', 'navToReadme');
   sheetsMenu.addItem('🎯 OKRs', 'navToOKRs');
   sheetsMenu.addItem('📋 Master RACI Tracker', 'navToMasterRACI');
   sheetsMenu.addItem('📅 Full Year Timeline', 'navToFullYearTimeline');
-  sheetsMenu.addItem('📅 Next 4 Weeks', 'navToNext4Weeks');
-  sheetsMenu.addItem('📅 FY2027 Timeline (Legacy)', 'navToTimeline');
+  sheetsMenu.addItem('📅 Next 6 Sprints', 'navToNext6Sprints');
   sheetsMenu.addSeparator();
   
   // Sprint sheets
@@ -244,7 +227,6 @@ function buildNavigationMenus_(ui) {
   checkInSubMenu.addItem('Director ML', 'navToDirectorML');
   checkInSubMenu.addItem('Director MI', 'navToDirectorMI');
   checkInSubMenu.addItem('Technical Director', 'navToTechnicalDirector');
-  checkInSubMenu.addItem('Advisory Committee', 'navToAdvisory');
   
   sheetsMenu.addSubMenu(checkInSubMenu);
   sheetsMenu.addSeparator();
@@ -253,14 +235,6 @@ function buildNavigationMenus_(ui) {
   sheetsMenu.addItem('📊 Sprint Deck Data', 'navToSprintDeckData');
   sheetsMenu.addItem('📝 Meeting Log', 'navToMeetingLog');
   sheetsMenu.addItem('⚙️ Satellite Config', 'navToSatelliteConfig');
-  
-  // Legacy sheets (Advisory Network - preserved for reference)
-  sheetsMenu.addSeparator();
-  const legacyMenu = ui.createMenu('📦 Legacy (Reference Only)');
-  legacyMenu.addItem('🤝 Advisory Network', 'navToAdvisoryNetwork');
-  legacyMenu.addItem('💬 Conversation Log', 'navToConversationLog');
-  legacyMenu.addItem('📊 Network Dashboard', 'navToNetworkDashboard');
-  sheetsMenu.addSubMenu(legacyMenu);
   
   sheetsMenu.addToUi();
   
@@ -275,9 +249,7 @@ function buildNavigationMenus_(ui) {
   satellitesMenu.addItem('🖥️ Director MI (TBD)', 'openSatelliteDirectorMI');
   satellitesMenu.addItem('🔧 Technical Director (TBD)', 'openSatelliteTechnicalDirector');
   satellitesMenu.addSeparator();
-  satellitesMenu.addItem('👥 Advisory Committee', 'openSatelliteAdvisory');
   satellitesMenu.addItem('🎯 OKRs (View Only)', 'openSatelliteOKRs');
-  satellitesMenu.addItem('📅 FY2027 Timeline', 'openSatelliteTimeline');
   satellitesMenu.addSeparator();
   satellitesMenu.addItem('📋 View All Satellite Links', 'navToSatelliteConfig');
   
@@ -290,12 +262,11 @@ function buildNavigationMenus_(ui) {
 // ============================================================================
 
 function navToHomeBase() { navigateToSheet_('🏛️ Home Base'); }
-function navToOSLegend() { navigateToSheet_('🗂️ OS Legend'); }
+function navToReadme() { navigateToSheet_('📖 README'); }
 function navToOKRs() { navigateToSheet_('🎯 Objectives and Key Results'); }
 function navToMasterRACI() { navigateToSheet_('📋 Master RACI Tracker'); }
-function navToTimeline() { navigateToSheet_('📅 FY2027 Timeline'); }
 function navToFullYearTimeline() { navigateToSheet_('📅 Full Year Timeline'); }
-function navToNext4Weeks() { navigateToSheet_('📅 Next 4 Weeks'); }
+function navToNext6Sprints() { navigateToSheet_('📅 Next 6 Sprints'); }
 function navToTimelineChangeLog() { navigateToSheet_('📅 Timeline Change Log'); }
 function navToSprintPlanning() { navigateToSheet_('🗓️ Sprint Planning'); }
 function navToSprintTemplate() { navigateToSheet_('⏱️ Sprint Template'); }
@@ -305,15 +276,9 @@ function navToInternalStakeholders() { navigateToSheet_('Internal Stakeholders C
 function navToDirectorML() { navigateToSheet_('Director ML Check-In'); }
 function navToDirectorMI() { navigateToSheet_('Director MI Check-In'); }
 function navToTechnicalDirector() { navigateToSheet_('Technical Director Check-In'); }
-function navToAdvisory() { navigateToSheet_('Advisory Committee'); }
 function navToSprintDeckData() { navigateToSheet_('📊 Sprint Deck Data'); }
 function navToMeetingLog() { navigateToSheet_('📝 Meeting Log'); }
 function navToSatelliteConfig() { navigateToSheet_('⚙️ Satellite Config'); }
-
-// Legacy navigation (preserved for reference)
-function navToAdvisoryNetwork() { navigateToSheet_('🤝 Advisory Network'); }
-function navToConversationLog() { navigateToSheet_('💬 Conversation Log'); }
-function navToNetworkDashboard() { navigateToSheet_('📊 Network Dashboard'); }
 
 // Dynamic sprint navigation (most recent 3)
 function navToSprint1() { navigateToRecentSprint_(0); }
@@ -357,9 +322,7 @@ function openSatelliteInternalStakeholders() { openSatelliteByName_('Internal St
 function openSatelliteDirectorML() { openSatelliteByName_('Director ML'); }
 function openSatelliteDirectorMI() { openSatelliteByName_('Director MI'); }
 function openSatelliteTechnicalDirector() { openSatelliteByName_('Technical Director'); }
-function openSatelliteAdvisory() { openSatelliteByName_('Advisory Committee'); }
 function openSatelliteOKRs() { openSatelliteByName_('OKRs'); }
-function openSatelliteTimeline() { openSatelliteByName_('FY2027 Timeline'); }
 
 function openSatelliteByName_(checkInName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -423,7 +386,6 @@ function initialSetup() {
     '   - Director ML (TBD)\n' +
     '   - Director MI (TBD)\n' +
     '   - Technical Director (TBD)\n' +
-    '   - Advisory Committee\n' +
     '   - OKRs (view only)\n' +
     '3. Create Master RACI Tracker sheet\n' +
     '4. Create Meeting Notes Log sheet\n' +
@@ -459,8 +421,11 @@ function initialSetup() {
     ss.toast('Creating Full Year Timeline...', '⚙️ Setup', -1);
     createFullYearTimelineSheet_(ss);
 
-    ss.toast('Creating Next 4 Weeks Timeline...', '⚙️ Setup', -1);
-    createNext4WeeksSheet_(ss);
+    ss.toast('Creating Next 6 Sprints Timeline...', '⚙️ Setup', -1);
+    createNext6SprintsSheet_(ss);
+
+    ss.toast('Creating README...', '⚙️ Setup', -1);
+    createReadmeSheet_(ss);
 
     ss.toast('Fixing formula references...', '⚙️ Setup', -1);
     fixFormulaReferences();
@@ -474,8 +439,7 @@ function initialSetup() {
       'Next steps:\n' +
       '1. Share each satellite workbook with the appropriate stakeholders\n' +
       '2. Update your notification email in Setup > Update Config Email\n' +
-      '3. Run "Setup FY2027 Timeline Satellite" to create the timeline\n' +
-      '4. Run "Sync Meeting Log from Calendar" to pull calendar events',
+      '3. Run "Sync Meeting Log from Calendar" to pull calendar events',
       ui.ButtonSet.OK
     );
     
@@ -1048,7 +1012,7 @@ function syncArchivesToAllSatellites() {
   for (let i = 1; i < data.length; i++) {
     const name = data[i][0];
     const id = data[i][1];
-    if (!id || name === 'FY2027 Timeline') continue;
+    if (!id) continue;
 
     const checkIn = CONFIG.checkIns.find(c => c.name === name);
     if (!checkIn || checkIn.type === 'okr') continue;
@@ -1077,7 +1041,7 @@ function pushArchiveToExistingSatellite() {
   const data = configSheet.getDataRange().getValues();
   const satellites = [];
   for (let i = 1; i < data.length; i++) {
-    if (data[i][1] && data[i][0] !== 'FY2027 Timeline') {
+    if (data[i][1]) {
       const checkIn = CONFIG.checkIns.find(c => c.name === data[i][0]);
       if (checkIn && checkIn.type === 'checkin') {
         satellites.push({ name: data[i][0], id: data[i][1] });
@@ -2111,7 +2075,7 @@ function distributeFromInternalStakeholders() {
   // Build owner → satellite mapping
   const ownerMap = {};
   CONFIG.checkIns.forEach(c => {
-    if (c.type === 'checkin' && c.owner && c.name !== 'Internal Stakeholders' && c.name !== 'Advisory Committee') {
+    if (c.type === 'checkin' && c.owner && c.name !== 'Internal Stakeholders') {
       // Map owner names to satellite names
       const names = c.owner.split(',').map(n => n.trim().toLowerCase());
       names.forEach(name => {
@@ -2215,295 +2179,10 @@ function distributeFromInternalStakeholders() {
 
 
 // ============================================================================
-// FY2027 TIMELINE SATELLITE
-// ============================================================================
-
-/**
- * Creates and configures the FY2027 Timeline satellite workbook.
- * Timeline covers Q4 FY2026 (Apr-Jun 2026) through Q4 FY2027 (Apr-Jun 2027).
- * Dates from each satellite's check-in can be mapped against this timeline.
- */
-function setupTimelineSatellite() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const ui = SpreadsheetApp.getUi();
-  
-  const response = ui.alert(
-    '📅 Setup FY2027 Timeline',
-    'This will create:\n\n' +
-    '1. A "📅 FY2027 Timeline" sheet in your master workbook\n' +
-    '2. A satellite workbook for the timeline (shareable)\n\n' +
-    'The timeline covers Q4 FY2026 (Apr-Jun 2026) through Q4 FY2027 (Apr-Jun 2027).\n\n' +
-    'Continue?',
-    ui.ButtonSet.YES_NO
-  );
-  
-  if (response !== ui.Button.YES) return;
-  
-  try {
-    ss.toast('Creating FY2027 Timeline...', '📅 Setup', -1);
-    
-    // Create timeline sheet in master
-    createTimelineSheet_(ss);
-    
-    // Create timeline satellite
-    createTimelineSatelliteWorkbook_(ss);
-    
-    ss.toast('FY2027 Timeline created!', '✅ Complete', 5);
-    
-    ui.alert(
-      '✅ Timeline Created',
-      'The FY2027 Timeline has been set up.\n\n' +
-      'Use "Update FY2027 Timeline" to populate it with dates from your satellite check-ins.\n' +
-      'The timeline data also feeds into the Sprint Deck.',
-      ui.ButtonSet.OK
-    );
-    
-  } catch (error) {
-    ui.alert('❌ Error', error.message, ui.ButtonSet.OK);
-    console.error(error);
-  }
-}
-
-
-function createTimelineSheet_(ss) {
-  let sheet = ss.getSheetByName(CONFIG.sheets.timelineConfig);
-  if (sheet) {
-    sheet.clear();
-  } else {
-    sheet = ss.insertSheet(CONFIG.sheets.timelineConfig);
-  }
-  
-  const timeline = CONFIG.fy2027Timeline;
-  
-  // Title
-  sheet.getRange('A1').setValue('📅 ' + timeline.label);
-  sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
-  sheet.getRange('A2').setValue('Last updated: ' + new Date().toLocaleString());
-  sheet.getRange('A2').setFontStyle('italic').setFontColor('#666');
-  
-  // Build header row with months
-  let col = 2;
-  const monthHeaders = ['Milestone / Item'];
-  const quarterRow = [''];
-  
-  timeline.quarters.forEach(q => {
-    quarterRow.push(q.name, '', '');
-    q.months.forEach(m => {
-      monthHeaders.push(m);
-    });
-  });
-  
-  // Row 4: Quarter headers (merged)
-  sheet.getRange(4, 1, 1, monthHeaders.length).setValues([[''].concat(Array(monthHeaders.length - 1).fill(''))]);
-  col = 2;
-  timeline.quarters.forEach(q => {
-    sheet.getRange(4, col, 1, 3).merge().setValue(q.name);
-    sheet.getRange(4, col, 1, 3).setBackground(q.color).setFontWeight('bold').setHorizontalAlignment('center');
-    col += 3;
-  });
-  
-  // Row 5: Month headers
-  sheet.getRange(5, 1, 1, monthHeaders.length).setValues([monthHeaders]);
-  sheet.getRange(5, 1, 1, monthHeaders.length).setFontWeight('bold').setBackground('#e8eaed');
-  
-  // Add satellite sections
-  let currentRow = 6;
-  
-  CONFIG.checkIns.forEach(checkIn => {
-    if (checkIn.type === 'okr') return;
-    
-    sheet.getRange(currentRow, 1).setValue('▶ ' + checkIn.name + ' (' + checkIn.owner + ')');
-    sheet.getRange(currentRow, 1, 1, monthHeaders.length).setFontWeight('bold').setBackground('#f5f5f5');
-    currentRow++;
-    
-    // Add 5 empty rows for milestones per satellite
-    for (let i = 0; i < 5; i++) {
-      currentRow++;
-    }
-    
-    currentRow++; // Spacer
-  });
-  
-  // Format columns
-  sheet.setColumnWidth(1, 250);
-  for (let c = 2; c <= monthHeaders.length; c++) {
-    sheet.setColumnWidth(c, 90);
-  }
-  
-  sheet.setFrozenRows(5);
-  sheet.setFrozenColumns(1);
-  
-  return sheet;
-}
-
-
-function createTimelineSatelliteWorkbook_(ss) {
-  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
-  if (!configSheet) return;
-  
-  // Check if timeline satellite already exists in config
-  const data = configSheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === 'FY2027 Timeline' && data[i][1]) return;
-  }
-  
-  const masterFolder = DriveApp.getFileById(ss.getId()).getParents().next();
-  let satelliteFolder;
-  const folderIterator = masterFolder.getFoldersByName('CCAT Satellite Check-Ins');
-  if (folderIterator.hasNext()) {
-    satelliteFolder = folderIterator.next();
-  } else {
-    satelliteFolder = masterFolder.createFolder('CCAT Satellite Check-Ins');
-  }
-  
-  const satellite = SpreadsheetApp.create('CCAT — FY2027 Timeline');
-  DriveApp.getFileById(satellite.getId()).moveTo(satelliteFolder);
-  
-  // Copy timeline data from master to satellite
-  const masterTimeline = ss.getSheetByName(CONFIG.sheets.timelineConfig);
-  if (masterTimeline) {
-    const satSheet = satellite.getSheets()[0];
-    satSheet.setName('FY2027 Timeline');
-    
-    const sourceData = masterTimeline.getDataRange();
-    const values = sourceData.getValues();
-    const backgrounds = sourceData.getBackgrounds();
-    const fontWeights = sourceData.getFontWeights();
-    
-    satSheet.getRange(1, 1, values.length, values[0].length).setValues(values);
-    satSheet.getRange(1, 1, values.length, values[0].length).setBackgrounds(backgrounds);
-    satSheet.getRange(1, 1, values.length, values[0].length).setFontWeights(fontWeights);
-    
-    for (let c = 1; c <= values[0].length; c++) {
-      satSheet.setColumnWidth(c, masterTimeline.getColumnWidth(c));
-    }
-  }
-  
-  // Add to config
-  const newRow = configSheet.getLastRow() + 1;
-  configSheet.getRange(newRow, 1, 1, 6).setValues([[
-    'FY2027 Timeline',
-    satellite.getId(),
-    satellite.getUrl(),
-    new Date(),
-    'Created',
-    'Shared'
-  ]]);
-}
-
-
-/**
- * Updates the FY2027 Timeline by mapping dates from satellite check-in action items.
- * Also pushes to the timeline satellite and sprint deck data.
- */
-function updateFY2027Timeline() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const timelineSheet = ss.getSheetByName(CONFIG.sheets.timelineConfig);
-  
-  if (!timelineSheet) {
-    SpreadsheetApp.getUi().alert('Timeline sheet not found. Run "Setup FY2027 Timeline" first.');
-    return;
-  }
-  
-  ss.toast('Updating FY2027 Timeline...', '📅 Timeline', -1);
-  
-  // Rebuild the timeline with current data from satellites
-  createTimelineSheet_(ss);
-  
-  // Now populate with actual dates from satellite action items
-  const timeline = CONFIG.fy2027Timeline;
-  const allMonths = [];
-  timeline.quarters.forEach(q => {
-    q.months.forEach(m => allMonths.push(m));
-  });
-  
-  let currentRow = 6;
-  
-  CONFIG.checkIns.forEach(checkIn => {
-    if (checkIn.type === 'okr') return;
-    
-    currentRow++; // Skip satellite header row
-    
-    const sheet = ss.getSheetByName(checkIn.activeSheet);
-    if (!sheet) {
-      currentRow += 6; // Skip empty rows + spacer
-      return;
-    }
-    
-    // Get action items with due dates
-    const actionData = sheet.getRange('A31:F40').getValues();
-    let itemRow = 0;
-    
-    actionData.forEach(row => {
-      if (!row[0] || !row[2] || itemRow >= 5) return;
-      
-      const dueDate = new Date(row[2]);
-      if (isNaN(dueDate.getTime())) return;
-      
-      const monthStr = dueDate.toLocaleString('default', { month: 'short' }) + ' ' + dueDate.getFullYear();
-      const monthIndex = allMonths.findIndex(m => m === monthStr);
-      
-      if (monthIndex >= 0) {
-        timelineSheet.getRange(currentRow + itemRow, 1).setValue(row[0]);
-        const emoji = CONFIG.categoryEmojis[row[4]] || '📌';
-        timelineSheet.getRange(currentRow + itemRow, 2 + monthIndex).setValue(emoji);
-        timelineSheet.getRange(currentRow + itemRow, 2 + monthIndex)
-          .setBackground('#FFFFFF')
-          .setFontSize(14)
-          .setHorizontalAlignment('center');
-        itemRow++;
-      }
-    });
-    
-    currentRow += 6; // Move past item rows + spacer
-  });
-  
-  // Sync timeline to satellite
-  syncTimelineToSatellite_(ss);
-  
-  ss.toast('FY2027 Timeline updated!', '✅ Complete', 5);
-}
-
-
-function syncTimelineToSatellite_(ss) {
-  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
-  if (!configSheet) return;
-  
-  const data = configSheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === 'FY2027 Timeline' && data[i][1]) {
-      try {
-        const satellite = SpreadsheetApp.openById(data[i][1]);
-        const satSheet = satellite.getSheetByName('FY2027 Timeline');
-        if (!satSheet) return;
-        
-        const masterSheet = ss.getSheetByName(CONFIG.sheets.timelineConfig);
-        if (!masterSheet) return;
-        
-        satSheet.clear();
-        const sourceData = masterSheet.getDataRange();
-        const values = sourceData.getValues();
-        const backgrounds = sourceData.getBackgrounds();
-        const fontWeights = sourceData.getFontWeights();
-        
-        satSheet.getRange(1, 1, values.length, values[0].length).setValues(values);
-        satSheet.getRange(1, 1, values.length, values[0].length).setBackgrounds(backgrounds);
-        satSheet.getRange(1, 1, values.length, values[0].length).setFontWeights(fontWeights);
-        
-        configSheet.getRange(i + 1, 4).setValue(new Date());
-        configSheet.getRange(i + 1, 5).setValue('Synced');
-      } catch (error) {
-        console.error('Timeline sync error: ' + error.message);
-      }
-      break;
-    }
-  }
-}
 
 
 // ============================================================================
-// FULL YEAR TIMELINE + NEXT 4 WEEKS
+// FULL YEAR TIMELINE + NEXT 6 SPRINTS
 // ============================================================================
 
 /**
@@ -2514,9 +2193,9 @@ function setupTimelines() {
   const ui = SpreadsheetApp.getUi();
   ss.toast('Creating timelines...', '📅 Setup', -1);
   createFullYearTimelineSheet_(ss);
-  createNext4WeeksSheet_(ss);
+  createNext6SprintsSheet_(ss);
   ss.toast('Timelines created!', '✅ Complete', 5);
-  ui.alert('✅ Timelines Created', 'Both "Full Year Timeline" and "Next 4 Weeks" sheets have been created with milestones pre-populated.\n\nItems marked with ⏳ have TBD dates (placed on estimated month).', ui.ButtonSet.OK);
+  ui.alert('✅ Timelines Created', 'Both "Full Year Timeline" and "Next 6 Sprints" sheets have been created with milestones pre-populated.\n\nItems marked with ⏳ have TBD dates (placed on estimated month).', ui.ButtonSet.OK);
 }
 
 /**
@@ -2596,12 +2275,6 @@ function createFullYearTimelineSheet_(ss) {
       { month: 2, label: '⏳ Directors of ML + Moving Image Appointed', tbd: true },
       { month: 3, label: '⏳ Full Team in Place', tbd: true },
     ]},
-    // ADVISORY COMMS
-    { cat: '📣 Advisory Committee Comms', items: [
-      { month: 0, label: 'Comms 1: Broad Thank-You / Readout w/ JD Links (Mar 24)', tbd: false },
-      { month: 1, label: 'Comms 2: Individual Formal AC Invitations (Apr 7–14)', tbd: false },
-      { month: 3, label: '⏳ Advisory Committee Established', tbd: true },
-    ]},
     // BUDGET & GOVERNANCE
     { cat: '💰 Budget & Governance', items: [
       { month: 0, label: 'Dedicated Budget Meeting (Financial deep-dive w/ Chanel)', tbd: false },
@@ -2640,7 +2313,6 @@ function createFullYearTimelineSheet_(ss) {
     { cat: '📣 Reporting & Deliverables', items: [
       { month: 0, label: 'Tech Notes + Takeaways Shared with Yana, Ravi, Provost', tbd: false },
       { month: 0, label: 'Mar 27: Presentation to Yana Peel', tbd: false },
-      { month: 0, label: 'Due Mar 20: Advisory Committee Proposal (names, expectations, engagement, comms)', tbd: false },
       { month: 0, label: 'Due Mar 20: Preliminary Plan for MC/Lumi Discovery Tour', tbd: false },
       { month: 0, label: 'Due Mar 20: Fall Programming with Artists Plan', tbd: false },
       { month: 4, label: '⏳ Full Team Announcement', tbd: true },
@@ -2706,194 +2378,143 @@ function refreshFullYearTimeline() {
 
 
 /**
- * Creates the Next 4 Weeks timeline sheet with granular weekly view.
- * Pre-populated with near-term tasks from transcript context.
+ * Creates the Next 6 Sprints timeline sheet.
+ * Shows a sprint-based planning view covering the current sprint + 5 upcoming sprints.
+ * Each sprint is a column (2-week block). Auto-pulls action items from satellites.
  */
-function createNext4WeeksSheet_(ss) {
-  let sheet = ss.getSheetByName(CONFIG.sheets.next4Weeks);
+function createNext6SprintsSheet_(ss) {
+  let sheet = ss.getSheetByName(CONFIG.sheets.next6Sprints);
   if (sheet) {
     sheet.clear();
   } else {
-    sheet = ss.insertSheet(CONFIG.sheets.next4Weeks);
+    sheet = ss.insertSheet(CONFIG.sheets.next6Sprints);
   }
 
   const today = new Date();
-  // Generate 4 weeks of Monday dates starting from this week
-  const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday of current week
 
-  const weeks = [];
-  for (let w = 0; w < 4; w++) {
-    const weekStart = new Date(startOfWeek);
-    weekStart.setDate(startOfWeek.getDate() + (w * 7));
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 4); // Friday
-    const label = (weekStart.getMonth() + 1) + '/' + weekStart.getDate() + ' - ' + (weekEnd.getMonth() + 1) + '/' + weekEnd.getDate();
-    weeks.push({ start: weekStart, end: weekEnd, label: label });
-  }
-
-  // Get current sprint info to label the 2-week blocks
+  // Get current sprint info
   const sprintInfo = getCurrentSprintInfo_(ss);
   const sprintNameStr = String(sprintInfo.name || 'Sprint 1');
   const currentSprintNum = parseInt(sprintNameStr.replace(/[^0-9]/g, '')) || 1;
 
+  // Calculate sprint date ranges (2 weeks each, starting from Monday of current week)
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday of current week
+
+  const sprints = [];
+  for (let s = 0; s < 6; s++) {
+    const sprintStart = new Date(startOfWeek);
+    sprintStart.setDate(startOfWeek.getDate() + (s * 14));
+    const sprintEnd = new Date(sprintStart);
+    sprintEnd.setDate(sprintStart.getDate() + 13);
+    const label = (sprintStart.getMonth() + 1) + '/' + sprintStart.getDate() + ' – ' +
+                  (sprintEnd.getMonth() + 1) + '/' + sprintEnd.getDate();
+    sprints.push({
+      num: currentSprintNum + s,
+      start: sprintStart,
+      end: sprintEnd,
+      label: label
+    });
+  }
+
   // Title
-  sheet.getRange('A1').setValue('📅 Next 4 Weeks — Detailed View');
+  sheet.getRange('A1').setValue('📅 Next 6 Sprints — Planning View');
   sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
-  sheet.getRange('A2').setValue('Generated: ' + today.toLocaleString() + '  |  ⏳ = TBD date  |  Run "Refresh Next 4 Weeks" to update');
+  sheet.getRange('A2').setValue('Generated: ' + today.toLocaleString() + '  |  ⏳ = TBD date  |  Run "Refresh Next 6 Sprints" to update');
   sheet.getRange('A2').setFontStyle('italic').setFontColor('#666');
 
-  // Row 3: Sprint labels spanning 2 weeks each
-  // Current sprint covers weeks 0-1, next sprint covers weeks 2-3
-  const sprintLabelRow = ['', '', ''];
-  sprintLabelRow.push('Sprint ' + currentSprintNum);
-  sprintLabelRow.push('');
-  sprintLabelRow.push('Sprint ' + (currentSprintNum + 1));
-  sprintLabelRow.push('');
-  sheet.getRange(3, 1, 1, sprintLabelRow.length).setValues([sprintLabelRow]);
-  // Merge sprint labels across their 2 week columns
-  sheet.getRange(3, 4, 1, 2).merge().setHorizontalAlignment('center').setFontWeight('bold')
-    .setBackground('#C9A227').setFontColor('#000000').setFontSize(11);
-  sheet.getRange(3, 6, 1, 2).merge().setHorizontalAlignment('center').setFontWeight('bold')
-    .setBackground('#4285F4').setFontColor('#FFFFFF').setFontSize(11);
-
-  // Row 4: Week headers
+  // Row 3: Sprint headers
   const headerRow = ['Task / Milestone', 'Owner', 'Status'];
-  weeks.forEach(w => headerRow.push('Week of ' + w.label));
-  sheet.getRange(4, 1, 1, headerRow.length).setValues([headerRow]);
-  sheet.getRange(4, 1, 1, headerRow.length).setFontWeight('bold').setBackground('#1a73e8').setFontColor('#FFFFFF');
+  const sprintColors = ['#C9A227', '#4285F4', '#0F9D58', '#AB47BC', '#FF7043', '#26A69A'];
+  const sprintFontColors = ['#000000', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF'];
 
-  // Pre-populated near-term items (Sprint 3: Mar 14-27, Sprint 4: Mar 28 - Apr 10)
-  // Week 0 = Mar 14-20, Week 1 = Mar 21-27, Week 2 = Mar 28 - Apr 3, Week 3 = Apr 4-10
-  const nearTermItems = [
-    { section: '⏱️ Sprint Ceremonies', items: [
-      { task: 'Sprint 3: Sprint Planning → Push to Internal Stakeholders (Mon EOD)', owner: 'ED', status: 'Not Started', week: 0 },
-      { task: 'Sprint 3: External Kick-Off with Chanel (Wed)', owner: 'ED + Team', status: 'Not Started', week: 0 },
-      { task: 'Sprint 3: Internal Sync — Bi-weekly IS Meeting (Fri)', owner: 'All Directors', status: 'Not Started', week: 1 },
-      { task: 'Sprint 4: Sprint Planning → Push to Internal Stakeholders (Mon EOD)', owner: 'ED', status: 'Not Started', week: 2 },
-      { task: 'Sprint 4: External Kick-Off with Chanel (Wed)', owner: 'ED + Team', status: 'Not Started', week: 2 },
-      { task: 'Sprint 4: Internal Sync — Bi-weekly IS Meeting (Fri)', owner: 'All Directors', status: 'Not Started', week: 3 },
-    ]},
-    { section: '📋 DELIVERABLES DUE Fri Mar 20 (before Yana presentation)', items: [
-      { task: 'Advisory Committee Proposal: names, expectations, engagement model, comms plan', owner: 'ED', status: 'Not Started', week: 0 },
-      { task: 'Preliminary Plan for MC/Lumi Discovery Tour', owner: 'ED + Lumi', status: 'Not Started', week: 0 },
-      { task: 'Fall Programming with Artists Plan', owner: 'ED + Lumi', status: 'Not Started', week: 0 },
-      { task: 'Prepare Sprint Deck update for Yana presentation', owner: 'ED', status: 'Not Started', week: 0 },
-      { task: 'Add speaker series recommendation to deck (2 models)', owner: 'ED', status: 'Not Started', week: 0 },
-    ]},
-    { section: '👥 Hiring Pipeline', items: [
-      { task: 'Phase 2: Finalize & Post JDs (By Mar 20)', owner: 'ED', status: 'In Progress', week: 0 },
-      { task: 'Phase 3: Open Search Window begins Mar 20', owner: 'ED', status: 'Not Started', week: 0 },
-      { task: 'Comms 1: Broad Thank-You / Readout with JD Links (Mar 24)', owner: 'ED', status: 'Not Started', week: 1 },
-      { task: 'Phase 3: Search Window open (ongoing through Apr 27)', owner: 'ED', status: 'Not Started', week: 2 },
-    ]},
-    { section: '🏗️ Building & Key Dates', items: [
-      { task: 'BB6 Equipment Plan finalization', owner: 'ED + IT', status: 'In Progress', week: 0 },
-      { task: 'Itemized Equipment List (Deliverable)', owner: 'ED', status: 'In Progress', week: 0 },
-      { task: '🏛️ Mar 24: Architect Visit to CalArts', owner: 'ED + Andreas', status: 'Confirmed', week: 1 },
-      { task: '📣 Mar 27: Presentation to Yana Peel', owner: 'ED + Katie', status: 'Confirmed', week: 1 },
-    ]},
-    { section: '🎪 Apr 9 Event (Speaker Series #2)', items: [
-      { task: 'Confirm main gallery space (Lund Theater sound resolution)', owner: 'Richard', status: 'In Progress', week: 0 },
-      { task: 'Reach out to Steve Lamb (Art School) for student interviewer', owner: 'Richard', status: 'Not Started', week: 0 },
-      { task: 'Get proposal from John Threat (IDEA event details)', owner: 'Alex Jacoby', status: 'In Progress', week: 0 },
-      { task: 'Book Nico for filming + Raphael for photos + ECO team', owner: 'Richard', status: 'Not Started', week: 0 },
-      { task: 'Revise budget (CCAT absorbs full stage cost, no cost-sharing with IDEA)', owner: 'Richard', status: 'Not Started', week: 0 },
-      { task: 'Confirm Mashinka studio visit / campus walkthrough', owner: 'Richard', status: 'Not Started', week: 1 },
-      { task: 'Create survey/QR feedback mechanism for attendees', owner: 'Richard', status: 'Not Started', week: 1 },
-      { task: 'Comms 2: Individual Formal AC Invitations (Apr 7–14)', owner: 'ED', status: 'Not Started', week: 3 },
-      { task: '🎪 EVENT DAY: Apr 9 — Mashinka Talk 4:30pm + IDEA Roundtable 6pm', owner: 'All', status: 'Upcoming', week: 3 },
-    ]},
-    { section: '🎨 Curation', items: [
-      { task: '⏳ Lumi LA visit — studio visits + curation model deep-dive', owner: 'Lumi + ED', status: 'Planning', week: 2 },
-      { task: 'Budget proposal for visiting artists + speaker series', owner: 'ED', status: 'Not Started', week: 2 },
-      { task: 'Research art/tech residency models (ongoing)', owner: 'Lumi', status: 'In Progress', week: 0 },
-      { task: 'Send Michael Langan event recording to Lumi', owner: 'Richard', status: 'Not Started', week: 0 },
-    ]},
-    { section: '🏫 Internal', items: [
-      { task: 'Investigate Alan Chen AI Symposium history + relevance', owner: 'ED', status: 'Not Started', week: 1 },
-      { task: 'Technology Group Synthesis and Next Steps', owner: 'ED', status: 'In Progress', week: 0 },
-      { task: 'Richard + Lumi meeting with Anthony (Student Services) re: orientation', owner: 'Richard + Lumi', status: 'Not Started', week: 1 },
-      { task: 'Facilities / IT Status Meeting for Advancement', owner: 'IT + ED', status: 'Not Started', week: 1 },
-    ]},
-  ];
-
-  let currentRow = 6;
-
-  nearTermItems.forEach(section => {
-    sheet.getRange(currentRow, 1, 1, headerRow.length).setBackground('#333333').setFontColor('#FFFFFF').setFontWeight('bold');
-    sheet.getRange(currentRow, 1).setValue(section.section);
-    currentRow++;
-
-    section.items.forEach(item => {
-      sheet.getRange(currentRow, 1).setValue(item.task);
-      sheet.getRange(currentRow, 2).setValue(item.owner);
-      sheet.getRange(currentRow, 3).setValue(item.status);
-
-      // Color status cell
-      const statusColors = { 'Complete': '#C8E6C9', 'In Progress': '#BBDEFB', 'Not Started': '#F5F5F5', 'Blocked': '#FFCDD2', 'Planning': '#FFF9C4', 'Upcoming': '#E1BEE7', 'Confirmed': '#DCEDC8' };
-      sheet.getRange(currentRow, 3).setBackground(statusColors[item.status] || '#F5F5F5');
-
-      // Place marker in correct week column
-      if (item.week >= 0 && item.week < 4) {
-        const marker = item.task.startsWith('⏳') ? '⏳' : (item.task.includes('EVENT DAY') ? '🎪' : '◆');
-        sheet.getRange(currentRow, 4 + item.week).setValue(marker).setHorizontalAlignment('center');
-        sheet.getRange(currentRow, 4 + item.week).setBackground('#E8EAF6');
-      }
-
-      // TBD items in purple
-      if (item.task.startsWith('⏳')) {
-        sheet.getRange(currentRow, 1).setFontColor('#9C27B0');
-      }
-
-      currentRow++;
-    });
-
-    currentRow++; // Spacer
+  sprints.forEach(sp => {
+    headerRow.push('Sprint ' + sp.num + '\n' + sp.label);
   });
 
-  // Also pull any action items from satellite check-ins with due dates in next 4 weeks
-  currentRow++;
+  sheet.getRange(3, 1, 1, headerRow.length).setValues([headerRow]);
+  sheet.getRange(3, 1, 1, 3).setFontWeight('bold').setBackground('#1a73e8').setFontColor('#FFFFFF');
+  sprints.forEach((sp, i) => {
+    sheet.getRange(3, 4 + i).setFontWeight('bold').setBackground(sprintColors[i]).setFontColor(sprintFontColors[i])
+      .setHorizontalAlignment('center').setWrap(true).setFontSize(10);
+  });
+
+  sheet.setRowHeight(3, 50);
+
+  let currentRow = 5;
+  const statusColors = { 'Complete': '#C8E6C9', 'In Progress': '#BBDEFB', 'Not Started': '#F5F5F5', 'Blocked': '#FFCDD2', 'Planning': '#FFF9C4', 'Upcoming': '#E1BEE7', 'Confirmed': '#DCEDC8' };
+
+  // ---- Auto-pull action items from satellite check-in trackers ----
   sheet.getRange(currentRow, 1, 1, headerRow.length).setBackground('#1a73e8').setFontColor('#FFFFFF').setFontWeight('bold');
   sheet.getRange(currentRow, 1).setValue('📋 Action Items from Satellite Trackers (auto-pulled)');
   currentRow++;
 
-  const weeksEnd = new Date(weeks[3].end);
+  const sprintsEnd = new Date(sprints[5].end);
+
   CONFIG.checkIns.forEach(checkIn => {
     if (checkIn.type === 'okr') return;
     const checkSheet = ss.getSheetByName(checkIn.activeSheet);
     if (!checkSheet) return;
 
     const actions = checkSheet.getRange('A31:F40').getValues();
+    let hasItems = false;
+
     actions.forEach(row => {
       if (!row[0] || String(row[0]).trim() === '') return;
       const dueDate = row[2] ? new Date(row[2]) : null;
       if (!dueDate || isNaN(dueDate.getTime())) return;
-      if (dueDate < today || dueDate > weeksEnd) return;
+      if (dueDate < today || dueDate > sprintsEnd) return;
 
-      sheet.getRange(currentRow, 1).setValue(row[0] + ' [' + checkIn.name + ']');
+      if (!hasItems) {
+        sheet.getRange(currentRow, 1, 1, headerRow.length).setBackground('#424242').setFontColor('#FFFFFF').setFontWeight('bold');
+        sheet.getRange(currentRow, 1).setValue('▶ ' + checkIn.name + ' (' + checkIn.owner + ')');
+        currentRow++;
+        hasItems = true;
+      }
+
+      sheet.getRange(currentRow, 1).setValue(row[0]);
       sheet.getRange(currentRow, 2).setValue(row[1] || '');
-      sheet.getRange(currentRow, 3).setValue(row[3] || 'Not Started');
+      const status = row[3] || 'Not Started';
+      sheet.getRange(currentRow, 3).setValue(status);
+      sheet.getRange(currentRow, 3).setBackground(statusColors[status] || '#F5F5F5');
 
-      // Find which week
-      for (let w = 0; w < 4; w++) {
-        if (dueDate >= weeks[w].start && dueDate <= weeks[w].end) {
-          sheet.getRange(currentRow, 4 + w).setValue('◆').setHorizontalAlignment('center').setBackground('#E8EAF6');
+      // Place marker in correct sprint column
+      for (let s = 0; s < 6; s++) {
+        if (dueDate >= sprints[s].start && dueDate <= sprints[s].end) {
+          const marker = row[0].toString().startsWith('⏳') ? '⏳' : '◆';
+          sheet.getRange(currentRow, 4 + s).setValue(marker).setHorizontalAlignment('center').setBackground('#E8EAF6');
           break;
         }
       }
+
+      if (row[0].toString().startsWith('⏳')) {
+        sheet.getRange(currentRow, 1).setFontColor('#9C27B0');
+      }
+
       currentRow++;
     });
+
+    if (hasItems) currentRow++; // Spacer after satellite section
   });
+
+  // ---- Empty rows for manual entry ----
+  currentRow++;
+  sheet.getRange(currentRow, 1, 1, headerRow.length).setBackground('#333333').setFontColor('#FFFFFF').setFontWeight('bold');
+  sheet.getRange(currentRow, 1).setValue('✏️ Manual Entries (add your own items below)');
+  currentRow++;
+  for (let i = 0; i < 10; i++) {
+    sheet.getRange(currentRow, 3).setBackground('#F5F5F5');
+    currentRow++;
+  }
 
   // Format
   sheet.setColumnWidth(1, 420);
   sheet.setColumnWidth(2, 150);
   sheet.setColumnWidth(3, 100);
   for (let c = 4; c <= headerRow.length; c++) {
-    sheet.setColumnWidth(c, 120);
+    sheet.setColumnWidth(c, 130);
   }
-  sheet.setFrozenRows(4);
+  sheet.setFrozenRows(3);
   sheet.setFrozenColumns(1);
 
   return sheet;
@@ -2901,13 +2522,205 @@ function createNext4WeeksSheet_(ss) {
 
 
 /**
- * Refresh Next 4 Weeks timeline
+ * Refresh Next 6 Sprints timeline
  */
-function refreshNext4Weeks() {
+function refreshNext6Sprints() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.toast('Refreshing Next 4 Weeks...', '📅 Timeline', -1);
-  createNext4WeeksSheet_(ss);
-  ss.toast('Next 4 Weeks refreshed!', '✅ Complete', 5);
+  ss.toast('Refreshing Next 6 Sprints...', '📅 Timeline', -1);
+  createNext6SprintsSheet_(ss);
+  ss.toast('Next 6 Sprints refreshed!', '✅ Complete', 5);
+}
+
+
+// ============================================================================
+// README — SYSTEM DOCUMENTATION
+// ============================================================================
+
+/**
+ * Creates or refreshes the README tab with system documentation and how-tos.
+ */
+function createReadmeSheet_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(CONFIG.sheets.readme);
+  if (sheet) {
+    sheet.clear();
+  } else {
+    sheet = ss.insertSheet(CONFIG.sheets.readme);
+  }
+
+  const gold = '#C9A227';
+  const darkBg = '#1a1a2e';
+  const sectionBg = '#16213e';
+  const headerBg = '#0f3460';
+  const textColor = '#e0e0e0';
+  const white = '#FFFFFF';
+
+  // Set background for entire visible area
+  sheet.getRange(1, 1, 80, 6).setBackground(darkBg).setFontColor(textColor).setFontFamily('Arial');
+
+  let row = 1;
+
+  // ---- TITLE ----
+  sheet.getRange(row, 1, 1, 6).merge().setValue('📖 CCAT Operating System — README')
+    .setFontSize(20).setFontWeight('bold').setFontColor(gold).setHorizontalAlignment('center');
+  row += 2;
+
+  sheet.getRange(row, 1, 1, 6).merge()
+    .setValue('This document explains how the CCAT OS works and how to perform common operations.')
+    .setFontStyle('italic').setFontColor('#aaa').setHorizontalAlignment('center');
+  row += 2;
+
+  // ---- SECTION HELPER ----
+  function addSection(title) {
+    sheet.getRange(row, 1, 1, 6).merge().setBackground(headerBg).setFontColor(gold)
+      .setFontSize(14).setFontWeight('bold').setValue(title);
+    row++;
+  }
+
+  function addSubSection(title) {
+    sheet.getRange(row, 1, 1, 6).merge().setBackground(sectionBg).setFontColor(white)
+      .setFontSize(12).setFontWeight('bold').setValue('  ' + title);
+    row++;
+  }
+
+  function addLine(text) {
+    sheet.getRange(row, 1, 1, 6).merge().setValue('  ' + text).setWrap(true);
+    row++;
+  }
+
+  function addBlank() { row++; }
+
+  // ---- SYSTEM OVERVIEW ----
+  addSection('🗺️ System Overview');
+  addLine('The CCAT OS is a hub-and-spoke project management system built in Google Sheets.');
+  addLine('It consists of a Master workbook (Home Base) and multiple Satellite workbooks — one per stakeholder.');
+  addLine('Data flows one way: Satellites → Master. The ED controls the master; stakeholders update their satellites.');
+  addBlank();
+  addLine('Key components:');
+  addLine('  🏛️ Home Base — The master dashboard (this workbook)');
+  addLine('  📡 Satellites — Individual workbooks for each stakeholder check-in');
+  addLine('  ⏱️ Sprints — 2-week execution cycles (bi-weekly planning cadence)');
+  addLine('  🎯 OKRs — Objectives and Key Results for strategic tracking');
+  addLine('  📋 Master RACI — Aggregated action items from all satellites');
+  addLine('  📅 Timelines — Full Year Timeline + Next 6 Sprints planning view');
+  addLine('  📊 Sprint Deck — Auto-generated summary for stakeholder presentations');
+  addLine('  📝 Meeting Log — Calendar integration + Granola AI meeting notes');
+  addBlank();
+
+  // ---- HOW TO: LAUNCH A NEW SPRINT ----
+  addSection('⏱️ How To: Launch a New Sprint');
+  addLine('1. Go to menu: 🎛️ CCAT System → 🔄 New Sprint (Rollover & Push)');
+  addLine('2. The system will:');
+  addLine('   a. Archive the current sprint sheet');
+  addLine('   b. Create a new sprint sheet from the Sprint Template');
+  addLine('   c. Push the new sprint info to all satellite workbooks');
+  addLine('   d. Carry over incomplete action items from the previous sprint');
+  addLine('3. After rollover, update Sprint Planning (B4: name, B5: dates, B6: intent)');
+  addLine('4. Run "Fix Formula References" if check-in sheets show old sprint info');
+  addBlank();
+
+  // ---- HOW TO: SYNC SATELLITES ----
+  addSection('🔁 How To: Sync Satellites');
+  addLine('1. Go to menu: 🎛️ CCAT System → 🔁 Sync All Satellites → Master');
+  addLine('2. This pulls action items from each satellite into the Master RACI Tracker');
+  addLine('3. To sync just OKRs: 🎛️ CCAT System → 🎯 Sync OKR Satellite Only');
+  addLine('4. Syncs are one-way: Satellite → Master (stakeholders never see master edits)');
+  addBlank();
+
+  // ---- HOW TO: PROCESS MEETING NOTES ----
+  addSection('📝 How To: Process Meeting Notes (Granola)');
+  addLine('1. After a meeting, copy the Granola transcript');
+  addLine('2. Go to: 🎛️ CCAT System → 📝 Meeting Notes → 📥 Process Granola Notes');
+  addLine('3. Paste the transcript when prompted');
+  addLine('4. The system uses Claude AI to extract action items and route them to the correct satellite');
+  addLine('5. To sync calendar events to the Meeting Log: use "Sync Meeting Log from Calendar"');
+  addBlank();
+
+  // ---- HOW TO: DISTRIBUTE ACTION ITEMS ----
+  addSection('📤 How To: Distribute Action Items');
+  addLine('1. After an Internal Stakeholders meeting, update that check-in sheet with action items');
+  addLine('2. Go to: 🎛️ CCAT System → 📋 RACI & Trackers → 📤 Distribute from IS');
+  addLine('3. The system matches action item owners to their satellite and pushes items there');
+  addLine('4. Owner names are matched using the satellite config (e.g., "Richard" → Production)');
+  addBlank();
+
+  // ---- HOW TO: GENERATE SPRINT DECK ----
+  addSection('📊 How To: Generate Sprint Deck');
+  addLine('1. Go to: 🎛️ CCAT System → 📊 Sprint Deck → 📊 Generate Sprint Deck Data');
+  addLine('2. This creates a summary sheet with: sprint overview, OKR progress, timeline snapshot, action items');
+  addLine('3. To email a summary: 📊 Sprint Deck → 📧 Send Sprint Summary Email');
+  addBlank();
+
+  // ---- HOW TO: UPDATE TIMELINES ----
+  addSection('📅 How To: Update Timelines');
+  addLine('Full Year Timeline:');
+  addLine('  - Shows milestones across 16 months (Mar 2026 – Jun 2027)');
+  addLine('  - To refresh: 🎛️ CCAT System → 📅 Timelines → 🔄 Refresh Full Year Timeline');
+  addLine('  - Milestones with ⏳ have TBD dates; bulls-eye markers (🎯) show confirmed dates');
+  addBlank();
+  addLine('Next 6 Sprints:');
+  addLine('  - Shows action items mapped across the next 6 sprint cycles (12 weeks)');
+  addLine('  - Auto-pulls due-dated items from all satellite trackers');
+  addLine('  - To refresh: 🎛️ CCAT System → 📅 Timelines → 🔄 Refresh Next 6 Sprints');
+  addLine('  - Includes a "Manual Entries" section at the bottom for ad-hoc items');
+  addBlank();
+
+  // ---- HOW TO: ADD A NEW SATELLITE ----
+  addSection('📡 How To: Add a New Satellite Check-In');
+  addLine('1. Open the script editor (Extensions → Apps Script)');
+  addLine('2. In CONFIG.checkIns, add a new entry:');
+  addLine('   { name: "New Name", activeSheet: "New Name Check-In",');
+  addLine('     title: "CCAT New Name Check-In", type: "checkin",');
+  addLine('     owner: "Person Name", preserveLink: false }');
+  addLine('3. Save the script, then run: 🎛️ CCAT System → ⚙️ Setup → 🚀 Initial Setup');
+  addLine('4. The system will create a new satellite workbook and check-in sheet automatically');
+  addLine('5. Share the new satellite workbook with the stakeholder');
+  addBlank();
+
+  // ---- HOW TO: SEND MEETING SUMMARIES ----
+  addSection('📧 How To: Send Meeting Summaries');
+  addLine('1. Go to: 🎛️ CCAT System → 📧 Communication → 📧 Send Meeting Summary');
+  addLine('2. This sends an email to meeting participants with the summary + satellite tracker link');
+  addLine('3. Make sure your email is configured in: ⚙️ Setup → 📝 Update Config Email');
+  addBlank();
+
+  // ---- ARCHITECTURE NOTES ----
+  addSection('🏗️ Architecture Notes');
+  addLine('Satellites:');
+  addLine('  - Each satellite has a "Check-In" sheet (current sprint) + "📚 Sprint Archives"');
+  addLine('  - Satellite IDs and URLs are stored in the ⚙️ Satellite Config tab');
+  addLine('  - preserveLink: true means the satellite existed before v2 and keeps its original ID');
+  addBlank();
+  addLine('Sprint lifecycle:');
+  addLine('  - Sprint Planning (B4–B6) defines the current sprint name, dates, and intent');
+  addLine('  - "New Sprint" archives the current sprint and creates a new one from the template');
+  addLine('  - Each sprint sheet records action items, status, and owner across all categories');
+  addBlank();
+  addLine('Meeting intelligence:');
+  addLine('  - Granola AI transcripts are parsed by Claude to extract structured action items');
+  addLine('  - Items are auto-routed to the correct satellite based on keyword matching');
+  addLine('  - Calendar sync pulls CCAT-related events into the Meeting Log');
+  addBlank();
+
+  // ---- QUICK REFERENCE ----
+  addSection('⚡ Quick Reference');
+  addLine('New sprint:          🎛️ CCAT System → 🔄 New Sprint');
+  addLine('Sync satellites:     🎛️ CCAT System → 🔁 Sync All Satellites');
+  addLine('Process notes:       🎛️ CCAT System → 📝 Meeting Notes → 📥 Process Granola Notes');
+  addLine('Refresh RACI:        🎛️ CCAT System → 📋 RACI & Trackers → 📋 Refresh Master RACI');
+  addLine('Sprint deck:         🎛️ CCAT System → 📊 Sprint Deck → 📊 Generate');
+  addLine('Refresh timelines:   🎛️ CCAT System → 📅 Timelines → 🔄 Refresh');
+  addLine('View all satellites:  📑 Sheets → ⚙️ Satellite Config');
+  addBlank();
+
+  // Format
+  sheet.setColumnWidth(1, 900);
+  for (let c = 2; c <= 6; c++) {
+    sheet.setColumnWidth(c, 10);
+  }
+  sheet.setFrozenRows(1);
+
+  return sheet;
 }
 
 
@@ -2961,7 +2774,6 @@ function syncMeetingLogFromCalendar() {
     'Director ML': ['director ml', 'machine learning'],
     'Director MI': ['director mi', 'moving image'],
     'Technical Director': ['technical director', 'tech director'],
-    'Advisory Committee': ['advisory'],
     'OKRs': ['okr', 'objectives'],
   };
 
@@ -3460,11 +3272,11 @@ function generateSprintDeckData() {
   currentRow += 2;
   
   // ---- SECTION 4: TIMELINE SNAPSHOT ----
-  deckSheet.getRange(currentRow, 1).setValue('FY2027 TIMELINE SNAPSHOT');
+  deckSheet.getRange(currentRow, 1).setValue('FULL YEAR TIMELINE SNAPSHOT');
   deckSheet.getRange(currentRow, 1, 1, 5).setBackground('#C9A227').setFontColor('#000000').setFontWeight('bold');
   currentRow++;
-  
-  const timelineSheet = ss.getSheetByName(CONFIG.sheets.timelineConfig);
+
+  const timelineSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
   if (timelineSheet) {
     // Copy a compact version of the timeline
     const timelineData = timelineSheet.getDataRange().getValues();
@@ -3478,7 +3290,7 @@ function generateSprintDeckData() {
       }
     }
   } else {
-    deckSheet.getRange(currentRow, 1).setValue('Timeline not configured. Run Setup → Setup FY2027 Timeline.');
+    deckSheet.getRange(currentRow, 1).setValue('Timeline not created yet. Run Setup → Setup Timelines.');
     currentRow++;
   }
   
@@ -3969,14 +3781,7 @@ function fixFormulaReferences() {
   
   CONFIG.checkIns.forEach(checkIn => {
     if (checkIn.type === 'okr') return;
-    
-    const template = ss.getSheetByName(checkIn.templateSheet);
-    if (template) {
-      template.getRange('B2').setValue(sprintInfo.name);
-      template.getRange('D2').setValue(sprintInfo.dates);
-      template.getRange('B3').setValue(sprintInfo.intent);
-    }
-    
+
     const active = ss.getSheetByName(checkIn.activeSheet);
     if (active) {
       active.getRange('B2').setValue(sprintInfo.name);
@@ -4117,7 +3922,7 @@ function getSystemMapHtml_() {
     '<div class="box system"><div class="emoji">🎯</div><h3>OKRs</h3><p>Strategy & Outcomes</p></div>' +
     '<div class="box system"><div class="emoji">⏱️</div><h3>Sprints</h3><p>Bi-Weekly Execution</p></div>' +
     '<div class="box system"><div class="emoji">📋</div><h3>Master RACI</h3><p>All Action Items</p></div>' +
-    '<div class="box system"><div class="emoji">📅</div><h3>FY2027 Timeline</h3><p>Milestone View</p></div>' +
+    '<div class="box system"><div class="emoji">📅</div><h3>Full Year Timeline</h3><p>Milestone View</p></div>' +
     '<div class="box system"><div class="emoji">📊</div><h3>Sprint Deck</h3><p>Auto-Generated</p></div>' +
     '</div>' +
     
@@ -4140,9 +3945,7 @@ function getSystemMapHtml_() {
     '</div>' +
     
     '<div class="row">' +
-    '<div class="box satellite"><div class="emoji">👥</div><h3>Advisory Committee</h3><p>Committee</p><span class="sync-indicator sync-one-way">→ Master</span></div>' +
     '<div class="box timeline"><div class="emoji">🎯</div><h3>OKR Satellite</h3><p>Read-Only View</p><span class="sync-indicator sync-push">← Push Only</span></div>' +
-    '<div class="box timeline"><div class="emoji">📅</div><h3>Timeline Satellite</h3><p>FY2027 View</p><span class="sync-indicator sync-push">← Push Only</span></div>' +
     '</div>' +
     
     // Granola Integration
