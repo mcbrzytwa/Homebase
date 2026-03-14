@@ -43,6 +43,7 @@ const CONFIG = {
     masterRaci: '📋 Master RACI Tracker',
     satelliteConfig: '⚙️ Satellite Config',
     fullYearTimeline: '📅 Full Year Timeline',
+    next4Weeks: '📅 Next 4 Weeks',
     next6Sprints: '📅 Next 6 Sprints',
     readme: '📖 README',
     sprintDeckData: '📊 Sprint Deck Data',
@@ -163,9 +164,11 @@ function onOpen() {
     .addSubMenu(ui.createMenu('📅 Timelines')
       .addItem('📅 View Full Year Timeline', 'navToFullYearTimeline')
       .addItem('📅 View Next 6 Sprints', 'navToNext6Sprints')
+      .addItem('📅 View Next 4 Weeks', 'navToNext4Weeks')
       .addSeparator()
       .addItem('🔄 Refresh Full Year Timeline', 'refreshFullYearTimeline')
       .addItem('🔄 Refresh Next 6 Sprints', 'refreshNext6Sprints')
+      .addItem('🔄 Refresh Next 4 Weeks', 'refreshNext4Weeks')
       .addSeparator()
       .addItem('📋 View Timeline Change Log', 'navToTimelineChangeLog'))
     .addSeparator()
@@ -196,7 +199,7 @@ function onOpen() {
       .addItem('🚀 Initial Setup (Create Satellites)', 'initialSetup')
       .addItem('🔄 Reformat Existing Satellites to v2', 'reformatExistingSatellites')
       .addItem('🔧 Fix Formula References', 'fixFormulaReferences')
-      .addItem('📅 Setup Timelines (Full Year + Next 6 Sprints)', 'setupTimelines')
+      .addItem('📅 Setup Timelines (Full Year + 4 Weeks + 6 Sprints)', 'setupTimelines')
       .addItem('📝 Update Config Email', 'promptForEmail')
       .addSeparator()
       .addItem('⏱️ Enable Auto Due-Date Conversion (satellites)', 'createSprintDateConversionTrigger')
@@ -220,6 +223,7 @@ function buildNavigationMenus_(ui) {
   sheetsMenu.addItem('🎯 OKRs', 'navToOKRs');
   sheetsMenu.addItem('📋 Master RACI Tracker', 'navToMasterRACI');
   sheetsMenu.addItem('📅 Full Year Timeline', 'navToFullYearTimeline');
+  sheetsMenu.addItem('📅 Next 4 Weeks', 'navToNext4Weeks');
   sheetsMenu.addItem('📅 Next 6 Sprints', 'navToNext6Sprints');
   sheetsMenu.addSeparator();
   
@@ -301,6 +305,7 @@ function navToSprintPlanning() { navigateToSheet_('🗓️ Sprint Planning'); }
 function navToSprintTemplate() { navigateToSheet_('⏱️ Sprint Template'); }
 function navToProductionSync() { navigateToSheet_('Production Sync '); }
 function navToCurator() { navigateToSheet_('Curator Check-In'); }
+function navToNext4Weeks() { navigateToSheet_('📅 Next 4 Weeks'); }
 function navToInternalStakeholders() { navigateToSheet_('Internal Stakeholders Check-In'); }
 function navToAdvancement() { navigateToSheet_('Advancement Check-In'); }
 function navToED() { navigateToSheet_('ED Check-In'); }
@@ -2828,9 +2833,10 @@ function setupTimelines() {
   const ui = SpreadsheetApp.getUi();
   ss.toast('Creating timelines...', '📅 Setup', -1);
   createFullYearTimelineSheet_(ss);
+  createNext4WeeksSheet_(ss);
   createNext6SprintsSheet_(ss);
   ss.toast('Timelines created!', '✅ Complete', 5);
-  ui.alert('✅ Timelines Created', 'Both "Full Year Timeline" and "Next 6 Sprints" sheets have been created with milestones pre-populated.\n\nItems marked with ⏳ have TBD dates (placed on estimated month).', ui.ButtonSet.OK);
+  ui.alert('✅ Timelines Created', '"Full Year Timeline", "Next 4 Weeks", and "Next 6 Sprints" sheets have been created with milestones pre-populated.\n\nItems marked with ⏳ have TBD dates (placed on estimated month).', ui.ButtonSet.OK);
 }
 
 /**
@@ -3165,6 +3171,253 @@ function refreshNext6Sprints() {
   ss.toast('Refreshing Next 6 Sprints...', '📅 Timeline', -1);
   createNext6SprintsSheet_(ss);
   ss.toast('Next 6 Sprints refreshed!', '✅ Complete', 5);
+}
+
+
+// ============================================================================
+// NEXT 4 WEEKS — NEAR-TERM MILESTONE & ACTION ITEM VIEW
+// ============================================================================
+
+/**
+ * Creates or refreshes the Next 4 Weeks sheet.
+ * Shows a week-by-week view of upcoming milestones (from Full Year Timeline)
+ * and action items (from satellite check-in trackers) within a 4-week window.
+ */
+function createNext4WeeksSheet_(ss) {
+  let sheet = ss.getSheetByName(CONFIG.sheets.next4Weeks);
+  if (sheet) {
+    sheet.clear();
+  } else {
+    sheet = ss.insertSheet(CONFIG.sheets.next4Weeks);
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Calculate 4 weeks starting from Monday of current week
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay() + 1);
+
+  const weeks = [];
+  for (let w = 0; w < 4; w++) {
+    const weekStart = new Date(startOfWeek);
+    weekStart.setDate(startOfWeek.getDate() + (w * 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const label = (weekStart.getMonth() + 1) + '/' + weekStart.getDate() + ' – ' +
+                  (weekEnd.getMonth() + 1) + '/' + weekEnd.getDate();
+    weeks.push({ start: weekStart, end: weekEnd, label: label });
+  }
+
+  const fourWeeksEnd = weeks[3].end;
+
+  // Title
+  sheet.getRange('A1').setValue('📅 Next 4 Weeks — Upcoming Milestones & Actions');
+  sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
+  sheet.getRange('A2').setValue('Generated: ' + today.toLocaleString() + '  |  🎯 = Confirmed  |  ⏳ = TBD  |  ◆ = Action Item  |  Run "Refresh Next 4 Weeks" to update');
+  sheet.getRange('A2').setFontStyle('italic').setFontColor('#666');
+
+  // Row 4: Headers
+  const weekColors = ['#C9A227', '#4285F4', '#0F9D58', '#AB47BC'];
+  const weekFontColors = ['#000000', '#FFFFFF', '#FFFFFF', '#FFFFFF'];
+  const headerRow = ['Item', 'Owner', 'Source', 'Status'];
+  weeks.forEach(w => headerRow.push('Week of\n' + w.label));
+
+  sheet.getRange(4, 1, 1, headerRow.length).setValues([headerRow]);
+  sheet.getRange(4, 1, 1, 4).setFontWeight('bold').setBackground('#1a73e8').setFontColor('#FFFFFF');
+  weeks.forEach((w, i) => {
+    sheet.getRange(4, 5 + i).setFontWeight('bold').setBackground(weekColors[i]).setFontColor(weekFontColors[i])
+      .setHorizontalAlignment('center').setWrap(true).setFontSize(10);
+  });
+  sheet.setRowHeight(4, 50);
+
+  const statusColors = { 'Complete': '#C8E6C9', 'In Progress': '#BBDEFB', 'Not Started': '#F5F5F5', 'Blocked': '#FFCDD2', 'Planning': '#FFF9C4', 'Upcoming': '#E1BEE7', 'Confirmed': '#DCEDC8' };
+  let currentRow = 6;
+
+  // ---- SECTION 1: Full Year Timeline Milestones ----
+  sheet.getRange(currentRow, 1, 1, headerRow.length).setBackground('#1a73e8').setFontColor('#FFFFFF').setFontWeight('bold');
+  sheet.getRange(currentRow, 1).setValue('🎯 Milestones from Full Year Timeline');
+  currentRow++;
+
+  const fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
+  if (fytSheet) {
+    const fytData = fytSheet.getDataRange().getValues();
+    // Row 5 (index 4) has month headers; data starts at row 7 (index 6)
+    const monthHeaders = fytData[4] || [];
+    // Parse month headers to date ranges
+    const monthDates = [];
+    for (let c = 1; c < monthHeaders.length; c++) {
+      const mStr = String(monthHeaders[c]).trim();
+      if (mStr) {
+        const parsed = new Date(mStr + ' 1');
+        if (!isNaN(parsed.getTime())) {
+          const monthEnd = new Date(parsed.getFullYear(), parsed.getMonth() + 1, 0);
+          monthDates.push({ col: c, start: parsed, end: monthEnd, label: mStr });
+        }
+      }
+    }
+
+    let currentCategory = '';
+    for (let r = 6; r < fytData.length; r++) {
+      const row = fytData[r];
+      const cellA = String(row[0] || '').trim();
+
+      // Detect category headers (dark bg rows with emoji prefix)
+      if (cellA && !row.slice(1).some(c => String(c).trim() !== '')) {
+        if (/^[^\w\s]/.test(cellA) && cellA.length > 2) {
+          currentCategory = cellA;
+          continue;
+        }
+      }
+
+      if (!cellA) continue;
+
+      // Find which month column has a marker
+      let markerMonth = null;
+      for (let c = 1; c < row.length; c++) {
+        const val = String(row[c]).trim();
+        if (val === '🎯' || val === '⏳' || val === '✅') {
+          // Find corresponding monthDate
+          const md = monthDates.find(m => m.col === c);
+          if (md) {
+            markerMonth = { date: md, marker: val };
+          }
+          break;
+        }
+      }
+
+      if (!markerMonth) continue;
+
+      // Check if this month overlaps with our 4-week window
+      if (markerMonth.date.end < startOfWeek || markerMonth.date.start > fourWeeksEnd) continue;
+
+      // Place in correct week column(s)
+      sheet.getRange(currentRow, 1).setValue(cellA);
+      if (cellA.startsWith('⏳')) {
+        sheet.getRange(currentRow, 1).setFontColor('#9C27B0');
+      }
+      sheet.getRange(currentRow, 3).setValue(currentCategory || 'Timeline');
+      sheet.getRange(currentRow, 4).setValue(markerMonth.marker === '✅' ? 'Complete' : 'Upcoming');
+      sheet.getRange(currentRow, 4).setBackground(markerMonth.marker === '✅' ? statusColors['Complete'] : statusColors['Upcoming']);
+
+      // For milestones with specific dates in their label, try to place in exact week
+      const dateMatch = cellA.match(/(?:Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}/i) ||
+                        cellA.match(/(\d{1,2})\/(\d{1,2})/);
+      let placed = false;
+      if (dateMatch) {
+        const tryDate = new Date(dateMatch[0] + ', 2026');
+        if (!isNaN(tryDate.getTime())) {
+          for (let w = 0; w < 4; w++) {
+            if (tryDate >= weeks[w].start && tryDate <= weeks[w].end) {
+              sheet.getRange(currentRow, 5 + w).setValue(markerMonth.marker).setHorizontalAlignment('center').setBackground('#E8EAF6');
+              placed = true;
+              break;
+            }
+          }
+        }
+      }
+      // If no specific date, spread across all overlapping weeks in that month
+      if (!placed) {
+        for (let w = 0; w < 4; w++) {
+          if (weeks[w].end >= markerMonth.date.start && weeks[w].start <= markerMonth.date.end) {
+            sheet.getRange(currentRow, 5 + w).setValue(markerMonth.marker).setHorizontalAlignment('center')
+              .setBackground(markerMonth.marker === '⏳' ? '#F3E5F5' : '#E8EAF6');
+          }
+        }
+      }
+
+      currentRow++;
+    }
+  }
+
+  currentRow++;
+
+  // ---- SECTION 2: Action Items from Satellite Trackers ----
+  sheet.getRange(currentRow, 1, 1, headerRow.length).setBackground('#1a73e8').setFontColor('#FFFFFF').setFontWeight('bold');
+  sheet.getRange(currentRow, 1).setValue('📋 Action Items from Satellite Trackers');
+  currentRow++;
+
+  CONFIG.checkIns.forEach(checkIn => {
+    if (checkIn.type === 'okr') return;
+    const checkSheet = ss.getSheetByName(checkIn.activeSheet);
+    if (!checkSheet) return;
+
+    const checkBounds = getSectionBoundaries_(checkSheet);
+    const actions = checkBounds.actions ? readSectionData_(checkSheet, checkBounds.actions) : [];
+    let hasItems = false;
+
+    actions.forEach(row => {
+      if (!row[0] || String(row[0]).trim() === '') return;
+      const dueDate = row[2] ? new Date(row[2]) : null;
+      if (!dueDate || isNaN(dueDate.getTime())) return;
+      if (dueDate < today || dueDate > fourWeeksEnd) return;
+
+      if (!hasItems) {
+        sheet.getRange(currentRow, 1, 1, headerRow.length).setBackground('#424242').setFontColor('#FFFFFF').setFontWeight('bold');
+        sheet.getRange(currentRow, 1).setValue('▶ ' + checkIn.name + ' (' + checkIn.owner + ')');
+        currentRow++;
+        hasItems = true;
+      }
+
+      sheet.getRange(currentRow, 1).setValue(row[0]);
+      sheet.getRange(currentRow, 2).setValue(row[1] || '');
+      sheet.getRange(currentRow, 3).setValue(checkIn.name);
+      const status = row[3] || 'Not Started';
+      sheet.getRange(currentRow, 4).setValue(status);
+      sheet.getRange(currentRow, 4).setBackground(statusColors[status] || '#F5F5F5');
+
+      if (row[0].toString().startsWith('⏳')) {
+        sheet.getRange(currentRow, 1).setFontColor('#9C27B0');
+      }
+
+      // Place marker in correct week column
+      for (let w = 0; w < 4; w++) {
+        if (dueDate >= weeks[w].start && dueDate <= weeks[w].end) {
+          const marker = row[0].toString().startsWith('⏳') ? '⏳' : '◆';
+          sheet.getRange(currentRow, 5 + w).setValue(marker).setHorizontalAlignment('center').setBackground('#E8EAF6');
+          break;
+        }
+      }
+
+      currentRow++;
+    });
+
+    if (hasItems) currentRow++;
+  });
+
+  // ---- Empty rows for manual entry ----
+  currentRow++;
+  sheet.getRange(currentRow, 1, 1, headerRow.length).setBackground('#333333').setFontColor('#FFFFFF').setFontWeight('bold');
+  sheet.getRange(currentRow, 1).setValue('✏️ Manual Entries (add your own items below)');
+  currentRow++;
+  for (let i = 0; i < 10; i++) {
+    sheet.getRange(currentRow, 4).setBackground('#F5F5F5');
+    currentRow++;
+  }
+
+  // Format
+  sheet.setColumnWidth(1, 420);
+  sheet.setColumnWidth(2, 150);
+  sheet.setColumnWidth(3, 160);
+  sheet.setColumnWidth(4, 100);
+  for (let c = 5; c <= headerRow.length; c++) {
+    sheet.setColumnWidth(c, 130);
+  }
+  sheet.setFrozenRows(4);
+  sheet.setFrozenColumns(1);
+
+  return sheet;
+}
+
+
+/**
+ * Refresh Next 4 Weeks timeline
+ */
+function refreshNext4Weeks() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ss.toast('Refreshing Next 4 Weeks...', '📅 Timeline', -1);
+  createNext4WeeksSheet_(ss);
+  ss.toast('Next 4 Weeks refreshed!', '✅ Complete', 5);
 }
 
 
