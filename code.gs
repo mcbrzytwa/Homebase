@@ -743,12 +743,15 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   const MIN_AGENDA = 9;
   const MIN_DECISIONS = 7;
   const MIN_ACTIONS = 10;
+  const MIN_RACI = 5;
   const MIN_PARKING = 5;
 
   const agendaRows = padRows_(existingData.agenda, MIN_AGENDA, 5);
   const decisionRows = padRows_(existingData.decisions, MIN_DECISIONS, 5);
   const actionRows = padRows_(existingData.actions, MIN_ACTIONS, 6);
+  const raciRows = padRows_(existingData.raci, MIN_RACI, 5);
   const parkingRows = padRows_(existingData.parking, MIN_PARKING, 4);
+  const hasRaci = existingData.raci && existingData.raci.length > 0;
 
   const headerData = [
     [checkIn.title, '', '', '', '', ''],
@@ -776,6 +779,13 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   headerData.push(['Task', 'Owner', 'Due Date', 'Status', 'Link', 'Satellite Source']);
   actionRows.forEach(r => headerData.push(padTo6_(r)));
 
+  // RACI section (only included if the old sheet had one)
+  if (hasRaci) {
+    headerData.push(['RACI', '', '', '', '', '']);
+    headerData.push(['Role', 'Responsible', 'Accountable', 'Consulted', 'Informed', '']);
+    raciRows.forEach(r => headerData.push(padTo6_(r)));
+  }
+
   // Parking Lot section
   headerData.push(['Parking Lot', '', '', '', '', '']);
   headerData.push(['Item', 'Owner', 'Notes', 'Link', '', '']);
@@ -790,7 +800,14 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   const decisionsHeaderRow = decisionsSectionRow + 1;
   const actionsSectionRow = decisionsHeaderRow + decisionRows.length + 1;
   const actionsHeaderRow = actionsSectionRow + 1;
-  const parkingSectionRow = actionsHeaderRow + actionRows.length + 1;
+  let raciSectionRow = -1, raciHeaderRow = -1;
+  let nextAfterActions = actionsHeaderRow + actionRows.length + 1;
+  if (hasRaci) {
+    raciSectionRow = nextAfterActions;
+    raciHeaderRow = raciSectionRow + 1;
+    nextAfterActions = raciHeaderRow + raciRows.length + 1;
+  }
+  const parkingSectionRow = nextAfterActions;
   const parkingHeaderRow = parkingSectionRow + 1;
 
   // Format header section
@@ -800,12 +817,16 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
   sheet.getRange('A5:F5').setBackground('#fff3cd').setFontStyle('italic');
 
   // Format section headers
-  [agendaSectionRow, decisionsSectionRow, actionsSectionRow, parkingSectionRow].forEach(row => {
+  const sectionHeaderRows = [agendaSectionRow, decisionsSectionRow, actionsSectionRow, parkingSectionRow];
+  if (hasRaci) sectionHeaderRows.push(raciSectionRow);
+  sectionHeaderRows.forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#f1f3f4');
   });
 
   // Format table headers
-  [agendaHeaderRow, decisionsHeaderRow, actionsHeaderRow, parkingHeaderRow].forEach(row => {
+  const tableHeaderRows = [agendaHeaderRow, decisionsHeaderRow, actionsHeaderRow, parkingHeaderRow];
+  if (hasRaci) tableHeaderRows.push(raciHeaderRow);
+  tableHeaderRows.forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#e8eaed');
   });
 
@@ -845,17 +866,17 @@ function reformatSatelliteToV2_(satelliteId, checkIn, masterId) {
 /**
  * Extracts existing data from a satellite sheet by finding section headers.
  * Works with both old-format and v2-format sheets.
- * Looks for sections: Agenda, Decisions, Action Items, Parking Lot
+ * Looks for sections: Agenda, Decisions, Action Items, RACI, Parking Lot
  */
 function extractSatelliteData_(sheet) {
   const lastRow = sheet.getLastRow();
   const lastCol = Math.max(sheet.getLastColumn(), 6);
-  if (lastRow < 1) return { agenda: [], decisions: [], actions: [], parking: [], meetingOutcome: '' };
+  if (lastRow < 1) return { agenda: [], decisions: [], actions: [], raci: [], parking: [], meetingOutcome: '' };
 
   const allData = sheet.getRange(1, 1, lastRow, lastCol).getValues();
 
   // Find section start rows by scanning column A for keywords
-  let agendaStart = -1, decisionsStart = -1, actionsStart = -1, parkingStart = -1;
+  let agendaStart = -1, decisionsStart = -1, actionsStart = -1, raciStart = -1, parkingStart = -1;
   let meetingOutcome = '';
 
   for (let i = 0; i < allData.length; i++) {
@@ -870,10 +891,15 @@ function extractSatelliteData_(sheet) {
       decisionsStart = i;
     } else if (cellA === 'action items' || cellA === 'action item') {
       actionsStart = i;
+    } else if (cellA === 'raci') {
+      raciStart = i;
     } else if (cellA === 'parking lot') {
       parkingStart = i;
     }
   }
+
+  // All section start indices for boundary detection
+  const allSections = [agendaStart, decisionsStart, actionsStart, raciStart, parkingStart];
 
   // Helper: extract data rows between a section header and the next section
   function extractSection(startIdx, colCount) {
@@ -882,7 +908,7 @@ function extractSatelliteData_(sheet) {
     const dataStart = startIdx + 2;
     // Find the end: next section or end of data
     let endIdx = allData.length;
-    [agendaStart, decisionsStart, actionsStart, parkingStart].forEach(s => {
+    allSections.forEach(s => {
       if (s > startIdx && s < endIdx) endIdx = s;
     });
 
@@ -902,6 +928,7 @@ function extractSatelliteData_(sheet) {
     agenda: extractSection(agendaStart, 5),       // Topic, Owner, Prep/Notes, Link, Priority
     decisions: extractSection(decisionsStart, 5),  // Decision, Owner, Impact, Follow-up, Link
     actions: extractSection(actionsStart, 6),       // Task, Owner, Due Date, Status, Link, Source
+    raci: extractSection(raciStart, 5),             // Role, Responsible, Accountable, Consulted, Informed
     parking: extractSection(parkingStart, 4),       // Item, Owner, Notes, Link
   };
 }
