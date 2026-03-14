@@ -48,6 +48,7 @@ const CONFIG = {
     advisoryNetwork: '🤝 Advisory Network',
     conversationLog: '💬 Conversation Log',
     networkDashboard: '📊 Network Dashboard',
+    docActivity: '📄 Doc Activity',
 
   },
   
@@ -199,6 +200,7 @@ function onOpen() {
       .addItem('📋 View Check-In History', 'viewCheckInHistory')
       .addItem('📊 Generate Archive Report', 'generateArchiveReport'))
     .addSeparator()
+    .addItem('📄 Doc Activity Dashboard', 'generateDocActivityDashboard')
     .addItem('🗺️ View System Map', 'showSystemMap')
     .addSeparator()
     .addSubMenu(ui.createMenu('⚙️ Setup')
@@ -207,7 +209,7 @@ function onOpen() {
       .addItem('📝 Update Config Email', 'promptForEmail')
       .addItem('📝 Setup OKR Change Tracking', 'setupOKRChangeTracking'))
     .addToUi();
-  
+
   // Build navigation menu for internal sheets
   buildNavigationMenus_(ui);
 }
@@ -277,8 +279,9 @@ function buildNavigationMenus_(ui) {
   sheetsMenu.addSeparator();
   sheetsMenu.addItem('📊 Bi-Weekly Summary', 'navToBiWeeklySummary');
   sheetsMenu.addItem('📝 OKR Change Log', 'navToOKRChangeLog');
+  sheetsMenu.addItem('📄 Doc Activity', 'navToDocActivity');
   sheetsMenu.addItem('⚙️ Satellite Config', 'navToSatelliteConfig');
-  
+
   sheetsMenu.addToUi();
   
   // =========================================================================
@@ -4302,6 +4305,7 @@ function onOpen() {
       .addItem('📋 View Check-In History', 'viewCheckInHistory')
       .addItem('📊 Generate Archive Report', 'generateArchiveReport'))
     .addSeparator()
+    .addItem('📄 Doc Activity Dashboard', 'generateDocActivityDashboard')
     .addItem('🗺️ View System Map', 'showSystemMap')
     .addSeparator()
     .addSubMenu(ui.createMenu('⚙️ Setup')
@@ -4858,6 +4862,284 @@ function saveEnhancedContact(contact) {
 // ============================================================================
 
 function navToNotesDocRegistry() { navigateToSheet_('📝 Notes Doc Registry'); }
+function navToDocActivity() { navigateToSheet_(CONFIG.sheets.docActivity); }
+
+
+// ============================================================================
+// DOCUMENT ACTIVITY DASHBOARD
+// ============================================================================
+
+/**
+ * Generates a dashboard showing activity (viewers, editors, last modified)
+ * across all tracked documents: Notes Docs, Call Reports, and Satellites.
+ */
+function generateDocActivityDashboard() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+
+  ss.toast('Gathering document activity...', '📄 Doc Activity', -1);
+
+  // Get or create the dashboard sheet
+  let dashSheet = ss.getSheetByName(CONFIG.sheets.docActivity);
+  if (!dashSheet) {
+    dashSheet = ss.insertSheet(CONFIG.sheets.docActivity);
+  }
+  dashSheet.clear();
+
+  // Collect all document references
+  const allDocs = [];
+
+  // 1. Master spreadsheet
+  allDocs.push({ name: '🏛️ Home Base (Master)', type: 'Master', id: ss.getId(), url: ss.getUrl() });
+
+  // 2. Satellite workbooks
+  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
+  if (configSheet && configSheet.getLastRow() > 1) {
+    const satData = configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues();
+    satData.forEach(function(row) {
+      if (row[1]) {
+        allDocs.push({ name: '📡 ' + row[0], type: 'Satellite', id: String(row[1]), url: String(row[2]) });
+      }
+    });
+  }
+
+  // 3. Notes Docs
+  const notesSheet = ss.getSheetByName('📝 Notes Doc Registry');
+  if (notesSheet && notesSheet.getLastRow() > 1) {
+    const notesData = notesSheet.getRange(2, 1, notesSheet.getLastRow() - 1, 5).getValues();
+    notesData.forEach(function(row) {
+      if (row[1] && row[4] === 'Active') {
+        allDocs.push({ name: '📝 ' + row[0], type: 'Notes Doc', id: String(row[1]), url: String(row[2]) });
+      }
+    });
+  }
+
+  // 4. Call Reports
+  const callSheet = ss.getSheetByName('📞 Call Report Registry');
+  if (callSheet && callSheet.getLastRow() > 1) {
+    const callData = callSheet.getDataRange().getValues();
+    const headers = callData[0];
+    const urlCol = headers.indexOf('Report Doc URL');
+    for (var i = 1; i < callData.length; i++) {
+      var reportUrl = urlCol >= 0 ? String(callData[i][urlCol]) : '';
+      var docId = extractDocIdFromUrl_(reportUrl);
+      if (docId) {
+        var label = (callData[i][2] || 'Unknown') + ' — ' + (callData[i][5] || callData[i][1] || '');
+        allDocs.push({ name: '📞 ' + label, type: 'Call Report', id: docId, url: reportUrl });
+      }
+    }
+  }
+
+  // Build header
+  var currentRow = 1;
+  dashSheet.getRange(currentRow, 1).setValue('📄 DOCUMENT ACTIVITY DASHBOARD');
+  dashSheet.getRange(currentRow, 1).setFontSize(16).setFontWeight('bold');
+  currentRow++;
+  dashSheet.getRange(currentRow, 1).setValue('Generated: ' + new Date().toLocaleString());
+  dashSheet.getRange(currentRow, 1).setFontStyle('italic').setFontColor('#666666');
+  currentRow++;
+  dashSheet.getRange(currentRow, 1).setValue('Total documents tracked: ' + allDocs.length);
+  dashSheet.getRange(currentRow, 1).setFontColor('#333333');
+  currentRow += 2;
+
+  // Summary counts by type
+  var typeCounts = {};
+  allDocs.forEach(function(d) {
+    typeCounts[d.type] = (typeCounts[d.type] || 0) + 1;
+  });
+
+  dashSheet.getRange(currentRow, 1).setValue('DOCUMENTS BY TYPE');
+  dashSheet.getRange(currentRow, 1, 1, 2).setBackground('#000000').setFontColor('#FFFFFF').setFontWeight('bold');
+  currentRow++;
+  var typeIcons = { 'Master': '🏛️', 'Satellite': '📡', 'Notes Doc': '📝', 'Call Report': '📞' };
+  Object.keys(typeCounts).forEach(function(type) {
+    dashSheet.getRange(currentRow, 1).setValue((typeIcons[type] || '') + ' ' + type);
+    dashSheet.getRange(currentRow, 2).setValue(typeCounts[type]);
+    currentRow++;
+  });
+  currentRow += 2;
+
+  // Table headers
+  var tableHeaders = ['Document', 'Type', 'Viewers', 'Editors', 'Last Modified', 'Owner', 'Link'];
+  dashSheet.getRange(currentRow, 1, 1, tableHeaders.length).setValues([tableHeaders]);
+  dashSheet.getRange(currentRow, 1, 1, tableHeaders.length)
+    .setFontWeight('bold')
+    .setBackground('#4285F4')
+    .setFontColor('white');
+  var tableHeaderRow = currentRow;
+  currentRow++;
+
+  // Fetch activity for each document
+  var dataRows = [];
+  var errors = [];
+
+  allDocs.forEach(function(doc) {
+    try {
+      var file = DriveApp.getFileById(doc.id);
+      var viewers = file.getViewers();
+      var editors = file.getEditors();
+      var lastUpdated = file.getLastUpdated();
+      var owner = file.getOwner();
+
+      dataRows.push([
+        doc.name,
+        doc.type,
+        viewers.length,
+        editors.length,
+        lastUpdated,
+        owner ? owner.getEmail() : 'Unknown',
+        doc.url
+      ]);
+    } catch (e) {
+      errors.push(doc.name + ': ' + e.message);
+      dataRows.push([
+        doc.name,
+        doc.type,
+        '—',
+        '—',
+        '—',
+        '—',
+        doc.url || ''
+      ]);
+    }
+  });
+
+  // Sort: most recently modified first
+  dataRows.sort(function(a, b) {
+    var dateA = a[4] instanceof Date ? a[4].getTime() : 0;
+    var dateB = b[4] instanceof Date ? b[4].getTime() : 0;
+    return dateB - dateA;
+  });
+
+  // Write data rows
+  if (dataRows.length > 0) {
+    dashSheet.getRange(currentRow, 1, dataRows.length, tableHeaders.length).setValues(dataRows);
+
+    // Format the table
+    for (var r = 0; r < dataRows.length; r++) {
+      var rowNum = currentRow + r;
+      // Alternate row colors
+      if (r % 2 === 0) {
+        dashSheet.getRange(rowNum, 1, 1, tableHeaders.length).setBackground('#f8f9fa');
+      }
+      // Color-code type column
+      var typeColors = { 'Master': '#e8f5e9', 'Satellite': '#e3f2fd', 'Notes Doc': '#fff3e0', 'Call Report': '#fce4ec' };
+      var typeColor = typeColors[dataRows[r][1]];
+      if (typeColor) {
+        dashSheet.getRange(rowNum, 2).setBackground(typeColor);
+      }
+      // Format date
+      if (dataRows[r][4] instanceof Date) {
+        dashSheet.getRange(rowNum, 5).setNumberFormat('MMM d, yyyy h:mm a');
+      }
+      // Make URL a clickable link
+      if (dataRows[r][6] && String(dataRows[r][6]).indexOf('http') === 0) {
+        var richLink = SpreadsheetApp.newRichTextValue()
+          .setText('Open')
+          .setLinkUrl(String(dataRows[r][6]))
+          .build();
+        dashSheet.getRange(rowNum, 7).setRichTextValue(richLink);
+      }
+      // Highlight high viewer/editor counts
+      if (typeof dataRows[r][2] === 'number' && dataRows[r][2] >= 5) {
+        dashSheet.getRange(rowNum, 3).setBackground('#c8e6c9').setFontWeight('bold');
+      }
+      if (typeof dataRows[r][3] === 'number' && dataRows[r][3] >= 3) {
+        dashSheet.getRange(rowNum, 4).setBackground('#c8e6c9').setFontWeight('bold');
+      }
+    }
+    currentRow += dataRows.length;
+  }
+
+  currentRow += 2;
+
+  // Viewer detail section — show who has access across all docs
+  dashSheet.getRange(currentRow, 1).setValue('VIEWER & EDITOR DIRECTORY');
+  dashSheet.getRange(currentRow, 1, 1, 3).setBackground('#000000').setFontColor('#FFFFFF').setFontWeight('bold');
+  currentRow++;
+
+  var userAccess = {};
+  allDocs.forEach(function(doc) {
+    try {
+      var file = DriveApp.getFileById(doc.id);
+      file.getViewers().forEach(function(user) {
+        var email = user.getEmail();
+        if (!email) return;
+        if (!userAccess[email]) userAccess[email] = { view: [], edit: [] };
+        userAccess[email].view.push(doc.name);
+      });
+      file.getEditors().forEach(function(user) {
+        var email = user.getEmail();
+        if (!email) return;
+        if (!userAccess[email]) userAccess[email] = { view: [], edit: [] };
+        userAccess[email].edit.push(doc.name);
+      });
+    } catch (e) { /* already logged above */ }
+  });
+
+  var dirHeaders = ['User', 'Docs with Edit Access', 'Docs with View Access'];
+  dashSheet.getRange(currentRow, 1, 1, dirHeaders.length).setValues([dirHeaders]);
+  dashSheet.getRange(currentRow, 1, 1, dirHeaders.length)
+    .setFontWeight('bold')
+    .setBackground('#34A853')
+    .setFontColor('white');
+  currentRow++;
+
+  var userEmails = Object.keys(userAccess).sort();
+  userEmails.forEach(function(email) {
+    dashSheet.getRange(currentRow, 1).setValue(email);
+    dashSheet.getRange(currentRow, 2).setValue(userAccess[email].edit.length + ' docs');
+    dashSheet.getRange(currentRow, 3).setValue(userAccess[email].view.length + ' docs');
+    if (currentRow % 2 === 0) {
+      dashSheet.getRange(currentRow, 1, 1, 3).setBackground('#f8f9fa');
+    }
+    currentRow++;
+  });
+
+  if (userEmails.length === 0) {
+    dashSheet.getRange(currentRow, 1).setValue('No shared viewers/editors found.').setFontStyle('italic');
+    currentRow++;
+  }
+
+  // Errors section
+  if (errors.length > 0) {
+    currentRow += 2;
+    dashSheet.getRange(currentRow, 1).setValue('⚠️ INACCESSIBLE DOCUMENTS');
+    dashSheet.getRange(currentRow, 1, 1, 2).setBackground('#FBBC04').setFontWeight('bold');
+    currentRow++;
+    errors.forEach(function(err) {
+      dashSheet.getRange(currentRow, 1).setValue(err);
+      dashSheet.getRange(currentRow, 1).setFontColor('#d93025');
+      currentRow++;
+    });
+  }
+
+  // Column widths
+  dashSheet.setColumnWidth(1, 300);
+  dashSheet.setColumnWidth(2, 120);
+  dashSheet.setColumnWidth(3, 80);
+  dashSheet.setColumnWidth(4, 80);
+  dashSheet.setColumnWidth(5, 180);
+  dashSheet.setColumnWidth(6, 220);
+  dashSheet.setColumnWidth(7, 80);
+  dashSheet.setFrozenRows(tableHeaderRow);
+
+  ss.toast('Document Activity Dashboard ready!', '📄 Done', 5);
+  ss.setActiveSheet(dashSheet);
+  dashSheet.getRange('A1').activate();
+}
+
+
+/**
+ * Extract Google Doc/Sheet ID from a URL
+ */
+function extractDocIdFromUrl_(url) {
+  if (!url) return null;
+  var match = String(url).match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+
 /**
  * ============================================================================
  * CCAT CONTACT REPORT & DICTATION SYSTEM
