@@ -1073,6 +1073,95 @@ function addCheckInDropdowns_(sheet, sectionRows) {
 
 
 /**
+ * Scans a check-in sheet (master sync or satellite) for section header rows and
+ * returns the data-row boundaries for each section.  Works with both fixed and
+ * dynamically-expanded layouts.
+ *
+ * Returns: { agenda: {start, end}, decisions: {start, end},
+ *            actions: {start, end}, raci: {start, end}, parking: {start, end} }
+ * start/end are 1-indexed row numbers for the DATA rows (after the column-header row).
+ * If a section is not found, its entry is null.
+ */
+function getSectionBoundaries_(sheet) {
+  const lastRow = Math.max(sheet.getLastRow(), 1);
+  const col = sheet.getRange(1, 1, lastRow, 1).getValues();
+
+  const sections = [];
+  for (let i = 0; i < col.length; i++) {
+    const v = String(col[i][0]).trim().toLowerCase();
+    if (v === 'agenda') sections.push({ key: 'agenda', row: i + 1 });
+    else if (v === 'decisions') sections.push({ key: 'decisions', row: i + 1 });
+    else if (v === 'action items' || v === 'action item') sections.push({ key: 'actions', row: i + 1 });
+    else if (v === 'raci') sections.push({ key: 'raci', row: i + 1 });
+    else if (v === 'parking lot') sections.push({ key: 'parking', row: i + 1 });
+  }
+
+  const result = {};
+  for (let s = 0; s < sections.length; s++) {
+    const headerRow = sections[s].row + 1;          // column-header row (e.g. "Topic | Owner | ...")
+    const dataStart = headerRow + 1;                 // first data row
+    const nextSectionRow = (s + 1 < sections.length) ? sections[s + 1].row : lastRow + 1;
+    const dataEnd = nextSectionRow - 1;              // last data row before next section header
+    result[sections[s].key] = { start: dataStart, end: dataEnd, sectionRow: sections[s].row, headerRow: headerRow };
+  }
+
+  // Fill in any missing sections as null
+  ['agenda', 'decisions', 'actions', 'raci', 'parking'].forEach(k => {
+    if (!result[k]) result[k] = null;
+  });
+
+  return result;
+}
+
+
+/**
+ * Reads data rows from a section identified by getSectionBoundaries_.
+ * Returns a 2D array of values (6 columns).
+ */
+function readSectionData_(sheet, bounds) {
+  if (!bounds || bounds.start > bounds.end) return [];
+  return sheet.getRange(bounds.start, 1, bounds.end - bounds.start + 1, 6).getValues();
+}
+
+
+/**
+ * Writes data rows into a section, inserting or deleting rows as needed so the
+ * section is exactly `rows.length` data rows (minimum `minRows`).
+ * Returns the number of rows inserted (positive) or deleted (negative) so the
+ * caller can adjust downstream positions.
+ */
+function writeSectionData_(sheet, bounds, rows, minRows) {
+  minRows = minRows || 0;
+  const targetCount = Math.max(rows.length, minRows);
+  const currentCount = bounds.end - bounds.start + 1;
+  const delta = targetCount - currentCount;
+
+  if (delta > 0) {
+    // Insert rows at the end of the section (before the next section header)
+    sheet.insertRowsAfter(bounds.end, delta);
+  } else if (delta < 0) {
+    // Delete excess rows from end of section
+    sheet.deleteRows(bounds.end + delta + 1, -delta);
+  }
+
+  // Clear the section data area (now correctly sized)
+  sheet.getRange(bounds.start, 1, targetCount, 6).clearContent();
+
+  // Write data
+  if (rows.length > 0) {
+    const padded = rows.map(r => {
+      const a = Array.isArray(r) ? r.slice(0, 6) : [r];
+      while (a.length < 6) a.push('');
+      return a;
+    });
+    sheet.getRange(bounds.start, 1, padded.length, 6).setValues(padded);
+  }
+
+  return delta;
+}
+
+
+/**
  * onEdit trigger: resolves sprint-relative due dates to the 2nd Thursday of that sprint.
  * When a user selects "This Sprint", "Next Sprint", "+2 Sprints", etc. in an Action Items
  * Due Date cell, it auto-converts to the actual date (2nd Thursday of that sprint).
@@ -1588,24 +1677,23 @@ function captureCurrentAgendas_(ss) {
     const sheet = ss.getSheetByName(checkIn.activeSheet);
     if (!sheet) return;
     
-    // Capture agenda items (rows 11-19)
-    const agendaRange = sheet.getRange('A11:F19');
-    const agendaData = agendaRange.getValues();
+    const bounds = getSectionBoundaries_(sheet);
+
+    // Capture agenda items
+    const agendaData = bounds.agenda ? readSectionData_(sheet, bounds.agenda) : [];
     const nonEmptyAgenda = agendaData.filter(row => row.some(cell => cell !== '' && cell !== null));
-    
-    // Capture incomplete action items (rows 31-40)
-    const actionRange = sheet.getRange('A31:F40');
-    const actionData = actionRange.getValues();
+
+    // Capture incomplete action items
+    const actionData = bounds.actions ? readSectionData_(sheet, bounds.actions) : [];
     const incompleteActions = actionData.filter(row => {
       const hasContent = row.some(cell => cell !== '' && cell !== null);
       const status = String(row[3] || '').toLowerCase().trim();
       const isComplete = status === 'done' || status === 'complete' || status === 'completed';
       return hasContent && !isComplete;
     });
-    
-    // Capture decisions (rows 22-28)
-    const decisionsRange = sheet.getRange('A22:F28');
-    const decisionsData = decisionsRange.getValues();
+
+    // Capture decisions
+    const decisionsData = bounds.decisions ? readSectionData_(sheet, bounds.decisions) : [];
     const nonEmptyDecisions = decisionsData.filter(row => row.some(cell => cell !== '' && cell !== null));
     
     agendas[checkIn.name] = {
@@ -1660,31 +1748,32 @@ function updateMasterCheckInSheets_(ss, sprintName, dates, intent, rolledOverAge
     sheet.getRange('B3').setValue(intent);
     
     const rollover = rolledOverAgendas[checkIn.name] || { agenda: [], actions: [], decisions: [] };
-    
-    // Clear and repopulate agenda items (rows 11-19)
-    sheet.getRange('A11:F19').clearContent();
-    if (rollover.agenda.length > 0) {
+    const bounds = getSectionBoundaries_(sheet);
+
+    // Clear and repopulate agenda items (auto-expands)
+    if (bounds.agenda) {
       const markedAgenda = rollover.agenda.map((row, index) => {
         if (index === 0 && row[0]) {
           return ['📌 [Rolled Over] ' + row[0], row[1], row[2], row[3], row[4], row[5] || ''];
         }
         return row.length >= 6 ? row : [...row, ...Array(6 - row.length).fill('')];
       });
-      const agendaRows = Math.min(markedAgenda.length, 9);
-      sheet.getRange(11, 1, agendaRows, 6).setValues(markedAgenda.slice(0, 9));
+      writeSectionData_(sheet, bounds.agenda, markedAgenda, 9);
     }
-    
-    // Clear decisions
-    sheet.getRange('A22:F28').clearContent();
-    
-    // Clear and repopulate incomplete action items (rows 31-40)
-    sheet.getRange('A31:F40').clearContent();
-    if (rollover.actions.length > 0) {
+
+    // Clear decisions (reset to minimum)
+    const bounds2 = getSectionBoundaries_(sheet);
+    if (bounds2.decisions) {
+      writeSectionData_(sheet, bounds2.decisions, [], 7);
+    }
+
+    // Clear and repopulate incomplete action items (auto-expands)
+    const bounds3 = getSectionBoundaries_(sheet);
+    if (bounds3.actions) {
       const markedActions = rollover.actions.map(row => {
         return ['⏳ [Carried Over] ' + row[0], row[1], row[2], 'Carried Over', row[4] || '', row[5] || ''];
       });
-      const actionRows = Math.min(markedActions.length, 10);
-      sheet.getRange(31, 1, actionRows, 6).setValues(markedActions.slice(0, 10));
+      writeSectionData_(sheet, bounds3.actions, markedActions, 10);
     }
   });
 }
@@ -1727,10 +1816,10 @@ function pushToAllSatellites_(sprintName, dates, intent, rolledOverAgendas) {
       sheet.getRange('B4').setValue(checkIn.owner || '');
       
       const rollover = rolledOverAgendas[checkInName] || { agenda: [], actions: [], decisions: [] };
-      
-      // Clear and repopulate agenda items
-      sheet.getRange('A11:F19').clearContent();
-      if (rollover.agenda.length > 0) {
+      const satBounds = getSectionBoundaries_(sheet);
+
+      // Clear and repopulate agenda items (auto-expands)
+      if (satBounds.agenda) {
         const markedAgenda = rollover.agenda.map((row, index) => {
           const r = row.length >= 6 ? row : [...row, ...Array(6 - row.length).fill('')];
           if (index === 0 && r[0]) {
@@ -1738,21 +1827,22 @@ function pushToAllSatellites_(sprintName, dates, intent, rolledOverAgendas) {
           }
           return r;
         });
-        const agendaRows = Math.min(markedAgenda.length, 9);
-        sheet.getRange(11, 1, agendaRows, 6).setValues(markedAgenda.slice(0, 9));
+        writeSectionData_(sheet, satBounds.agenda, markedAgenda, 9);
       }
-      
-      // Clear decisions
-      sheet.getRange('A22:F28').clearContent();
-      
-      // Clear and repopulate incomplete action items
-      sheet.getRange('A31:F40').clearContent();
-      if (rollover.actions.length > 0) {
+
+      // Clear decisions (reset to minimum)
+      const satBounds2 = getSectionBoundaries_(sheet);
+      if (satBounds2.decisions) {
+        writeSectionData_(sheet, satBounds2.decisions, [], 7);
+      }
+
+      // Clear and repopulate incomplete action items (auto-expands)
+      const satBounds3 = getSectionBoundaries_(sheet);
+      if (satBounds3.actions) {
         const markedActions = rollover.actions.map(row => {
           return ['⏳ [Carried Over] ' + row[0], row[1], row[2], 'Carried Over', row[4] || '', row[5] || ''];
         });
-        const actionRows = Math.min(markedActions.length, 10);
-        sheet.getRange(31, 1, actionRows, 6).setValues(markedActions.slice(0, 10));
+        writeSectionData_(sheet, satBounds3.actions, markedActions, 10);
       }
       
       configSheet.getRange(i + 1, 4).setValue(new Date());
@@ -1813,18 +1903,24 @@ function syncAllSatellitesToMaster() {
       const masterSheet = ss.getSheetByName(checkIn.activeSheet);
       if (!masterSheet) continue;
       
-      // Sync editable sections FROM satellite TO master (one-way)
-      // Agenda (rows 11-19)
-      const agendaData = satSheet.getRange('A11:F19').getValues();
-      masterSheet.getRange('A11:F19').setValues(agendaData);
-      
-      // Decisions (rows 22-28)
-      const decisionsData = satSheet.getRange('A22:F28').getValues();
-      masterSheet.getRange('A22:F28').setValues(decisionsData);
-      
-      // Action Items (rows 31-40)
-      const actionData = satSheet.getRange('A31:F40').getValues();
-      masterSheet.getRange('A31:F40').setValues(actionData);
+      // Sync editable sections FROM satellite TO master (dynamic boundaries)
+      const satBounds = getSectionBoundaries_(satSheet);
+      const masterBounds = getSectionBoundaries_(masterSheet);
+
+      if (satBounds.agenda && masterBounds.agenda) {
+        const data = readSectionData_(satSheet, satBounds.agenda);
+        writeSectionData_(masterSheet, masterBounds.agenda, data, 9);
+      }
+      const masterBounds2 = getSectionBoundaries_(masterSheet);
+      if (satBounds.decisions && masterBounds2.decisions) {
+        const data = readSectionData_(satSheet, satBounds.decisions);
+        writeSectionData_(masterSheet, masterBounds2.decisions, data, 7);
+      }
+      const masterBounds3 = getSectionBoundaries_(masterSheet);
+      if (satBounds.actions && masterBounds3.actions) {
+        const data = readSectionData_(satSheet, satBounds.actions);
+        writeSectionData_(masterSheet, masterBounds3.actions, data, 10);
+      }
       
       configSheet.getRange(i + 1, 4).setValue(new Date());
       configSheet.getRange(i + 1, 5).setValue('Synced');
@@ -1948,12 +2044,13 @@ function refreshMasterRACI() {
     const sheet = ss.getSheetByName(checkIn.activeSheet);
     if (!sheet) return;
     
-    // Pull action items (rows 31-40)
-    const actionData = sheet.getRange('A31:F40').getValues();
-    
+    // Pull action items (dynamic boundaries)
+    const bounds = getSectionBoundaries_(sheet);
+    const actionData = bounds.actions ? readSectionData_(sheet, bounds.actions) : [];
+
     actionData.forEach(row => {
       if (!row[0] || String(row[0]).trim() === '') return;
-      
+
       allActions.push([
         checkIn.name,             // Satellite Source
         row[0],                   // Task
@@ -1966,9 +2063,9 @@ function refreshMasterRACI() {
         new Date()                // Last Updated
       ]);
     });
-    
+
     // Also pull decisions as context
-    const decisionsData = sheet.getRange('A22:F28').getValues();
+    const decisionsData = bounds.decisions ? readSectionData_(sheet, bounds.decisions) : [];
     decisionsData.forEach(row => {
       if (!row[0] || String(row[0]).trim() === '') return;
       
@@ -2102,38 +2199,38 @@ function processGranolaNotesForSatellite(satelliteName, granolaText, participant
   // Populate the satellite tracker in master
   const sheet = ss.getSheetByName(checkIn.activeSheet);
   if (!sheet) throw new Error('Master sheet "' + checkIn.activeSheet + '" not found.');
-  
-  // Populate agenda items
-  if (extracted.agenda && extracted.agenda.length > 0) {
-    const agendaRows = Math.min(extracted.agenda.length, 9);
-    for (let i = 0; i < agendaRows; i++) {
-      const a = extracted.agenda[i];
-      sheet.getRange(11 + i, 1, 1, 6).setValues([[
-        a.topic || '', a.owner || '', a.notes || '', a.link || '', a.priority || '', ''
-      ]]);
-    }
+
+  // Use dynamic section boundaries so we can expand if items exceed default rows
+  const bounds = getSectionBoundaries_(sheet);
+
+  // Populate agenda items (auto-expands if > default rows)
+  if (extracted.agenda && extracted.agenda.length > 0 && bounds.agenda) {
+    const agendaData = extracted.agenda.map(a => [
+      a.topic || '', a.owner || '', a.notes || '', a.link || '', a.priority || '', ''
+    ]);
+    writeSectionData_(sheet, bounds.agenda, agendaData, 9);
   }
-  
-  // Populate decisions
-  if (extracted.decisions && extracted.decisions.length > 0) {
-    const decRows = Math.min(extracted.decisions.length, 7);
-    for (let i = 0; i < decRows; i++) {
-      const d = extracted.decisions[i];
-      sheet.getRange(22 + i, 1, 1, 6).setValues([[
-        d.decision || '', d.owner || '', d.impact || '', d.followUp || '', d.link || '', ''
-      ]]);
-    }
+
+  // Re-read boundaries after potential row insertion
+  const bounds2 = getSectionBoundaries_(sheet);
+
+  // Populate decisions (auto-expands if > default rows)
+  if (extracted.decisions && extracted.decisions.length > 0 && bounds2.decisions) {
+    const decData = extracted.decisions.map(d => [
+      d.decision || '', d.owner || '', d.impact || '', d.followUp || '', d.link || '', ''
+    ]);
+    writeSectionData_(sheet, bounds2.decisions, decData, 7);
   }
-  
-  // Populate action items
-  if (extracted.actionItems && extracted.actionItems.length > 0) {
-    const actRows = Math.min(extracted.actionItems.length, 10);
-    for (let i = 0; i < actRows; i++) {
-      const a = extracted.actionItems[i];
-      sheet.getRange(31 + i, 1, 1, 6).setValues([[
-        a.task || '', a.owner || '', a.dueDate || '', a.status || 'Not Started', a.link || '', satelliteName
-      ]]);
-    }
+
+  // Re-read boundaries after potential row insertion
+  const bounds3 = getSectionBoundaries_(sheet);
+
+  // Populate action items (auto-expands if > default rows)
+  if (extracted.actionItems && extracted.actionItems.length > 0 && bounds3.actions) {
+    const actData = extracted.actionItems.map(a => [
+      a.task || '', a.owner || '', a.dueDate || '', a.status || 'Not Started', a.link || '', satelliteName
+    ]);
+    writeSectionData_(sheet, bounds3.actions, actData, 10);
   }
   
   // Push to satellite workbook
@@ -2250,12 +2347,27 @@ function pushToSingleSatellite_(ss, satelliteName) {
       
       const masterSheet = ss.getSheetByName(checkIn.activeSheet);
       if (!masterSheet) continue;
-      
-      // Push all editable sections from master to satellite
-      satSheet.getRange('A11:F19').setValues(masterSheet.getRange('A11:F19').getValues());
-      satSheet.getRange('A22:F28').setValues(masterSheet.getRange('A22:F28').getValues());
-      satSheet.getRange('A31:F40').setValues(masterSheet.getRange('A31:F40').getValues());
-      
+
+      // Push all editable sections from master to satellite using dynamic boundaries
+      const masterBounds = getSectionBoundaries_(masterSheet);
+      const satBounds = getSectionBoundaries_(satSheet);
+
+      if (masterBounds.agenda && satBounds.agenda) {
+        const data = readSectionData_(masterSheet, masterBounds.agenda);
+        writeSectionData_(satSheet, satBounds.agenda, data, 9);
+      }
+      // Re-read satellite bounds after possible row changes
+      const satBounds2 = getSectionBoundaries_(satSheet);
+      if (masterBounds.decisions && satBounds2.decisions) {
+        const data = readSectionData_(masterSheet, masterBounds.decisions);
+        writeSectionData_(satSheet, satBounds2.decisions, data, 7);
+      }
+      const satBounds3 = getSectionBoundaries_(satSheet);
+      if (masterBounds.actions && satBounds3.actions) {
+        const data = readSectionData_(masterSheet, masterBounds.actions);
+        writeSectionData_(satSheet, satBounds3.actions, data, 10);
+      }
+
       configSheet.getRange(i + 1, 4).setValue(new Date());
       configSheet.getRange(i + 1, 5).setValue('Synced');
     } catch (error) {
@@ -2330,8 +2442,9 @@ function distributeFromInternalStakeholders() {
   ownerMap['richard lonsdorf'] = 'Production';
   ownerMap['richard'] = 'Production';
   
-  // Read action items from Internal Stakeholders sheet
-  const actionData = isSheet.getRange('A31:F40').getValues();
+  // Read action items from Internal Stakeholders sheet (dynamic boundaries)
+  const isBounds = getSectionBoundaries_(isSheet);
+  const actionData = isBounds.actions ? readSectionData_(isSheet, isBounds.actions) : [];
   
   const distributed = {};
   const unmatched = [];
@@ -2696,7 +2809,8 @@ function createNext6SprintsSheet_(ss) {
     const checkSheet = ss.getSheetByName(checkIn.activeSheet);
     if (!checkSheet) return;
 
-    const actions = checkSheet.getRange('A31:F40').getValues();
+    const checkBounds = getSectionBoundaries_(checkSheet);
+    const actions = checkBounds.actions ? readSectionData_(checkSheet, checkBounds.actions) : [];
     let hasItems = false;
 
     actions.forEach(row => {
@@ -3797,24 +3911,27 @@ function archiveSatelliteTrackers_(ss, sprintName) {
     const sheet = ss.getSheetByName(checkIn.activeSheet);
     if (!sheet) return;
     
+    // Archive using dynamic section boundaries
+    const archBounds = getSectionBoundaries_(sheet);
+
     // Archive agenda items
-    const agendaData = sheet.getRange('A11:F19').getValues();
+    const agendaData = archBounds.agenda ? readSectionData_(sheet, archBounds.agenda) : [];
     agendaData.forEach(row => {
       if (row[0] && String(row[0]).trim()) {
         archiveSheet.appendRow([sprintName, checkIn.name, 'Agenda', row[0], row[1], '', today]);
       }
     });
-    
+
     // Archive decisions
-    const decisions = sheet.getRange('A22:F28').getValues();
+    const decisions = archBounds.decisions ? readSectionData_(sheet, archBounds.decisions) : [];
     decisions.forEach(row => {
       if (row[0] && String(row[0]).trim()) {
         archiveSheet.appendRow([sprintName, checkIn.name, 'Decision', row[0], row[1], row[2], today]);
       }
     });
-    
+
     // Archive action items
-    const actions = sheet.getRange('A31:F40').getValues();
+    const actions = archBounds.actions ? readSectionData_(sheet, archBounds.actions) : [];
     actions.forEach(row => {
       if (row[0] && String(row[0]).trim()) {
         archiveSheet.appendRow([sprintName, checkIn.name, 'Action Item', row[0], row[1], row[3], today]);
