@@ -97,6 +97,21 @@ const CONFIG = {
     sprintDueDate: ['This Sprint', 'Next Sprint', '2 Sprints Out', '3 Sprints Out', '4 Sprints Out', '5 Sprints Out'],
     raciFunctions: ["President's Office", 'Advancement', 'Production', 'Curator', 'ED', 'CHANEL', 'Provost', 'BB6', 'Research']
   },
+
+  // Maps person names (lowercase) to their RACI function/department.
+  // Used to auto-assign the Role column when a name appears in RACI data.
+  nameToFunction: {
+    'katie': 'Advancement',
+    'andreas': 'Advancement',
+    'kari': 'Advancement',
+    'lumi': 'Production',
+    'richard': 'Curator',
+    'mc': 'ED',
+    'kiara': "President's Office",
+    'ravi': "President's Office",
+    'irene': 'CHANEL',
+    'yana': 'CHANEL'
+  },
   
   // Colors for quarter shading (calendar year, for OKR sheet)
   quarterColors: {
@@ -663,11 +678,15 @@ function setupSatelliteWorkbook_(satellite, checkIn, masterId) {
     ['', '', '', '', '', ''],
     ['RACI', '', '', '', '', ''],
     ['Role', 'Responsible', 'Accountable', 'Consulted', 'Informed', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
-    ['', '', '', '', '', ''],
+    ["President's Office", '', '', '', '', ''],
+    ['Advancement', '', '', '', '', ''],
+    ['Production', '', '', '', '', ''],
+    ['Curator', '', '', '', '', ''],
+    ['ED', '', '', '', '', ''],
+    ['CHANEL', '', '', '', '', ''],
+    ['Provost', '', '', '', '', ''],
+    ['BB6', '', '', '', '', ''],
+    ['Research', '', '', '', '', ''],
     ['Parking Lot', '', '', '', '', ''],
     ['Item', 'Owner', 'Notes', 'Link', '', ''],
   ];
@@ -680,13 +699,13 @@ function setupSatelliteWorkbook_(satellite, checkIn, masterId) {
   sheet.getRange('A4:F4').setBackground('#f0f7ff');
   sheet.getRange('A5:F5').setBackground('#fff3cd').setFontStyle('italic');
 
-  // Format section headers (Agenda=9, Decisions=20, Actions=29, RACI=41, Parking=48)
-  [9, 20, 29, 41, 48].forEach(row => {
+  // Format section headers (Agenda=9, Decisions=20, Actions=29, RACI=41, Parking=52)
+  [9, 20, 29, 41, 52].forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#f1f3f4');
   });
 
   // Format table headers
-  [10, 21, 30, 42, 49].forEach(row => {
+  [10, 21, 30, 42, 53].forEach(row => {
     sheet.getRange(row, 1, 1, 6).setFontWeight('bold').setBackground('#e8eaed');
   });
 
@@ -706,7 +725,7 @@ function setupSatelliteWorkbook_(satellite, checkIn, masterId) {
     actionsSectionRow: 29,
     actionsHeaderRow: 30,
     raciHeaderRow: 42,
-    parkingSectionRow: 48,
+    parkingSectionRow: 52,
   });
   
   // Protection for header rows
@@ -1161,6 +1180,80 @@ function writeSectionData_(sheet, bounds, rows, minRows) {
   }
 
   return delta;
+}
+
+
+/**
+ * Organizes RACI rows by function/department.
+ * 1. Scans columns B-E for person names and auto-fills the Role column (A)
+ *    with the matching function from CONFIG.nameToFunction.
+ * 2. Sorts rows so they are grouped by function in the order defined in
+ *    CONFIG.dropdownOptions.raciFunctions.
+ * 3. Ensures every function has at least one row (empty placeholder).
+ *
+ * Input: 2D array of RACI rows [Role, Responsible, Accountable, Consulted, Informed, ...]
+ * Returns: organized 2D array.
+ */
+function organizeRACIByFunction_(raciRows) {
+  const nameMap = CONFIG.nameToFunction;
+  const functionOrder = CONFIG.dropdownOptions.raciFunctions;
+
+  // Build buckets: one per function, preserving order
+  const buckets = {};
+  functionOrder.forEach(fn => { buckets[fn] = []; });
+  const unmatched = [];
+
+  // Process each row: auto-assign Role based on names in B-E
+  raciRows.forEach(row => {
+    const r = Array.isArray(row) ? row.slice() : [row];
+    while (r.length < 5) r.push('');
+
+    // Try to determine function from names in columns B-E (indices 1-4)
+    let assignedFunction = String(r[0]).trim(); // existing Role value
+
+    if (!assignedFunction || !functionOrder.some(fn => fn === assignedFunction)) {
+      // Role is empty or not a known function — infer from names
+      for (let col = 1; col <= 4; col++) {
+        const cellVal = String(r[col]).trim().toLowerCase();
+        if (!cellVal) continue;
+
+        // Check each known name against the cell (supports "Katie Smith" or just "katie")
+        for (const [name, fn] of Object.entries(nameMap)) {
+          if (cellVal.indexOf(name) !== -1) {
+            assignedFunction = fn;
+            break;
+          }
+        }
+        if (assignedFunction && functionOrder.some(fn => fn === assignedFunction)) break;
+      }
+    }
+
+    // Place into the correct bucket
+    if (assignedFunction && buckets[assignedFunction]) {
+      r[0] = assignedFunction;
+      buckets[assignedFunction].push(r);
+    } else if (r.slice(1).some(c => String(c).trim() !== '')) {
+      // Has content but no function match — keep in unmatched
+      unmatched.push(r);
+    }
+    // Skip completely empty rows
+  });
+
+  // Build result: functions in order, each with at least one row
+  const result = [];
+  functionOrder.forEach(fn => {
+    if (buckets[fn].length > 0) {
+      buckets[fn].forEach(r => result.push(r));
+    } else {
+      // Empty placeholder row for this function
+      result.push([fn, '', '', '', '', '']);
+    }
+  });
+
+  // Append any unmatched rows at the end
+  unmatched.forEach(r => result.push(r));
+
+  return result;
 }
 
 
@@ -2023,8 +2116,14 @@ function syncAllSatellitesToMaster() {
       }
       const masterBounds4 = getSectionBoundaries_(masterSheet);
       if (satBounds.raci && masterBounds4.raci) {
-        const data = readSectionData_(satSheet, satBounds.raci);
-        writeSectionData_(masterSheet, masterBounds4.raci, data, 5);
+        const rawRaci = readSectionData_(satSheet, satBounds.raci);
+        const organizedRaci = organizeRACIByFunction_(rawRaci);
+        writeSectionData_(masterSheet, masterBounds4.raci, organizedRaci, 5);
+        // Also write organized data back to the satellite
+        const satBoundsRefresh = getSectionBoundaries_(satSheet);
+        if (satBoundsRefresh.raci) {
+          writeSectionData_(satSheet, satBoundsRefresh.raci, organizedRaci, 5);
+        }
       }
       const masterBounds5 = getSectionBoundaries_(masterSheet);
       if (satBounds.parking && masterBounds5.parking) {
@@ -2546,11 +2645,23 @@ function distributeFromInternalStakeholders() {
     }
   });
   
-  // Also add known name mappings
-  ownerMap['lumi tan'] = 'Curator';
-  ownerMap['lumi'] = 'Curator';
-  ownerMap['richard lonsdorf'] = 'Production';
-  ownerMap['richard'] = 'Production';
+  // Also add known name mappings from CONFIG.nameToFunction → satellite name
+  // nameToFunction maps to RACI functions; we need to map to satellite names
+  const functionToSatellite = {
+    'Advancement': null,             // No dedicated satellite
+    'Production': 'Production',
+    'Curator': 'Curator',
+    'ED': null,                      // ED is the hub owner
+    "President's Office": null,
+    'CHANEL': null,
+    'Provost': null,
+    'BB6': null,
+    'Research': null
+  };
+  Object.entries(CONFIG.nameToFunction).forEach(([name, fn]) => {
+    const sat = functionToSatellite[fn];
+    if (sat) ownerMap[name] = sat;
+  });
   
   // Read action items from Internal Stakeholders sheet (dynamic boundaries)
   const isBounds = getSectionBoundaries_(isSheet);
@@ -2592,34 +2703,26 @@ function distributeFromInternalStakeholders() {
     
     const targetSheet = ss.getSheetByName(checkIn.activeSheet);
     if (!targetSheet) return;
-    
-    // Find next empty action item row in target (rows 31-40)
-    const existingActions = targetSheet.getRange('A31:A40').getValues();
-    let nextRow = 31;
-    for (let i = 0; i < existingActions.length; i++) {
-      if (!existingActions[i][0] || String(existingActions[i][0]).trim() === '') {
-        nextRow = 31 + i;
-        break;
-      }
-      if (i === existingActions.length - 1) {
-        nextRow = 31 + i + 1;
-      }
-    }
-    
+
+    // Use dynamic boundaries to find action items section
+    const targetBounds = getSectionBoundaries_(targetSheet);
+    if (!targetBounds.actions) return;
+
+    const existingActions = readSectionData_(targetSheet, targetBounds.actions);
+    // Append new items to existing (non-empty) action rows
+    const newActions = existingActions.filter(r => r.some(c => String(c).trim() !== ''));
     items.forEach(item => {
-      if (nextRow > 40) return; // Don't exceed action items area
-      
-      targetSheet.getRange(nextRow, 1, 1, 6).setValues([[
+      newActions.push([
         '📤 [From IS] ' + item[0],
         item[1],
         item[2],
         item[3] || 'Not Started',
         item[4] || '',
         'Internal Stakeholders'
-      ]]);
-      nextRow++;
+      ]);
       totalDistributed++;
     });
+    writeSectionData_(targetSheet, targetBounds.actions, newActions, 10);
     
     // Push to satellite workbook
     pushToSingleSatellite_(ss, satName);
