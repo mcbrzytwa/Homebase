@@ -2670,10 +2670,10 @@ function createFullYearTimelineSheet_(ss) {
       // Place marker in the correct month column
       const markerCol = item.month + 2;
       if (markerCol <= headerRow.length) {
-        const marker = item.tbd ? '⏳' : '✅';
+        const marker = item.tbd ? '⏳' : '🎯';
         sheet.getRange(currentRow, markerCol).setValue(marker).setHorizontalAlignment('center').setFontSize(12);
         // Light highlight across that cell
-        const bgColor = item.tbd ? '#F3E5F5' : '#C8E6C9';
+        const bgColor = item.tbd ? '#F3E5F5' : '#E3F2FD';
         sheet.getRange(currentRow, markerCol).setBackground(bgColor);
       }
       currentRow++;
@@ -3173,9 +3173,9 @@ function updateTimelinesFromMeeting_(ss, timelineUpdates, sourceMeeting) {
     }
 
     // Try to find an existing milestone that matches (fuzzy match on label)
-    const updateLabelClean = update.milestone.toLowerCase().replace(/[⏳✅🎪📣🏛️]/g, '').trim();
+    const updateLabelClean = update.milestone.toLowerCase().replace(/[⏳✅🎯🎪📣🏛️]/g, '').trim();
     let matched = existingMilestones.find(em => {
-      const existingClean = em.label.toLowerCase().replace(/[⏳✅🎪📣🏛️]/g, '').trim();
+      const existingClean = em.label.toLowerCase().replace(/[⏳✅🎯🎪📣🏛️]/g, '').trim();
       // Check for substantial overlap
       return existingClean.includes(updateLabelClean) || updateLabelClean.includes(existingClean) ||
         levenshteinSimilarity_(existingClean, updateLabelClean) > 0.6;
@@ -3195,8 +3195,8 @@ function updateTimelinesFromMeeting_(ss, timelineUpdates, sourceMeeting) {
           fullYearSheet.getRange(matched.row, matched.markerCol + 1).clear();
           if (targetMonthIndex >= 0) {
             const isTBD = update.isTBD !== false;
-            const marker = isTBD ? '⏳' : '✅';
-            const bgColor = isTBD ? '#F3E5F5' : '#C8E6C9';
+            const marker = isTBD ? '⏳' : '🎯';
+            const bgColor = isTBD ? '#F3E5F5' : '#E3F2FD';
             fullYearSheet.getRange(matched.row, targetMonthIndex + 2).setValue(marker)
               .setHorizontalAlignment('center').setFontSize(12).setBackground(bgColor);
             // Update label if it gained/lost TBD
@@ -3306,8 +3306,8 @@ function addMilestoneToFullYear_(sheet, update, monthIndex, months) {
     sheet.getRange(insertRow, 1).setFontColor('#9C27B0');
   }
 
-  const marker = isTBD ? '⏳' : '✅';
-  const bgColor = isTBD ? '#F3E5F5' : '#C8E6C9';
+  const marker = isTBD ? '⏳' : '🎯';
+  const bgColor = isTBD ? '#F3E5F5' : '#E3F2FD';
   sheet.getRange(insertRow, monthIndex + 2).setValue(marker)
     .setHorizontalAlignment('center').setFontSize(12).setBackground(bgColor);
 }
