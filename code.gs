@@ -2846,7 +2846,18 @@ function setupTimelines() {
  */
 function createFullYearTimelineSheet_(ss) {
   let sheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
+
+  // Read existing statuses before clearing (keyed by milestone label)
+  const savedStatuses = {};
   if (sheet) {
+    const data = sheet.getDataRange().getValues();
+    for (let r = 0; r < data.length; r++) {
+      const label = String(data[r][0] || '').trim();
+      const status = String(data[r][1] || '').trim();
+      if (label && (status === 'Complete' || status === 'Behind')) {
+        savedStatuses[label] = status;
+      }
+    }
     sheet.clear();
   } else {
     sheet = ss.insertSheet(CONFIG.sheets.fullYearTimeline);
@@ -2881,8 +2892,8 @@ function createFullYearTimelineSheet_(ss) {
     'Q3 FY2027': '#FFF3E0', 'Q4 FY2027': '#F3E5F5'
   };
 
-  // Row 4: Quarter headers (merged)
-  let col = 2;
+  // Row 4: Quarter headers (merged) — start at col 3 (after Category + Status)
+  let col = 3;
   const quarters = ['Q3 FY2026', 'Q4 FY2026', 'Q1 FY2027', 'Q2 FY2027', 'Q3 FY2027', 'Q4 FY2027'];
   const qWidths = [1, 3, 3, 3, 3, 3];
   quarters.forEach((q, i) => {
@@ -2892,83 +2903,88 @@ function createFullYearTimelineSheet_(ss) {
   });
 
   // Row 5: Month headers
-  const headerRow = ['Category'].concat(months);
+  const headerRow = ['Category', 'Status'].concat(months);
   sheet.getRange(5, 1, 1, headerRow.length).setValues([headerRow]);
   sheet.getRange(5, 1, 1, headerRow.length).setFontWeight('bold').setBackground('#e8eaed');
 
   // Apply month background colors
   for (let c = 0; c < months.length; c++) {
     const qColor = quarterColors[quarterMap[months[c]]];
-    sheet.getRange(5, c + 2).setBackground(qColor);
+    sheet.getRange(5, c + 3).setBackground(qColor);
   }
 
   // ---- PRE-POPULATED MILESTONES FROM YANA DECK + TRANSCRIPT ----
-  // Each milestone: { month, label, tbd, complete, behind }
-  // complete: true → ✅ green background   |   behind: true → red background   |   tbd: true → ⏳ purple
+  // Status (Complete / Behind) is now stored in column B of the sheet itself.
+  // Just set it in the Status column and refresh — no code changes needed.
   const milestones = [
     // HIRING
     { cat: '👥 Hiring', items: [
-      { month: 0, label: 'Phase 1: Internal JD Approval (By Mar 13)', tbd: false, complete: false, behind: true },
-      { month: 0, label: 'Phase 2: Finalize & Post JDs (By Mar 20)', tbd: false, complete: false, behind: false },
-      { month: 0, label: 'Phase 3: Open Search Window (Mar 20 – Apr 27)', tbd: false, complete: false, behind: false },
-      { month: 1, label: 'Phase 3 continues (Mar 20 – Apr 27)', tbd: false, complete: false, behind: false },
-      { month: 1, label: 'Phase 4: Close Search (Week of Apr 28)', tbd: false, complete: false, behind: false },
-      { month: 2, label: 'Phase 5: Interviews (May 12 – May 23)', tbd: false, complete: false, behind: false },
-      { month: 2, label: '⏳ Directors of ML + Moving Image Appointed', tbd: true, complete: false, behind: false },
-      { month: 3, label: '⏳ Full Team in Place', tbd: true, complete: false, behind: false },
+      { month: 0, label: 'Phase 1: Internal JD Approval (By Mar 13)', tbd: false },
+      { month: 0, label: 'Phase 2: Finalize & Post JDs (By Mar 20)', tbd: false },
+      { month: 0, label: 'Phase 3: Open Search Window (Mar 20 – Apr 27)', tbd: false },
+      { month: 1, label: 'Phase 3 continues (Mar 20 – Apr 27)', tbd: false },
+      { month: 1, label: 'Phase 4: Close Search (Week of Apr 28)', tbd: false },
+      { month: 2, label: 'Phase 5: Interviews (May 12 – May 23)', tbd: false },
+      { month: 2, label: '⏳ Directors of ML + Moving Image Appointed', tbd: true },
+      { month: 3, label: '⏳ Full Team in Place', tbd: true },
     ]},
     // BUDGET & GOVERNANCE
     { cat: '💰 Budget & Governance', items: [
-      { month: 0, label: 'Dedicated Budget Meeting (Financial deep-dive w/ Chanel)', tbd: false, complete: true, behind: false },
-      { month: 0, label: 'Budget Refinement (Advancement + ED)', tbd: false, complete: false, behind: false },
-      { month: 1, label: '⏳ Budget Proposal for Speaker Series + Visiting Artists', tbd: true, complete: false, behind: false },
+      { month: 0, label: 'Dedicated Budget Meeting (Financial deep-dive w/ Chanel)', tbd: false },
+      { month: 0, label: 'Budget Refinement (Advancement + ED)', tbd: false },
+      { month: 1, label: '⏳ Budget Proposal for Speaker Series + Visiting Artists', tbd: true },
     ]},
     // BUILDING & FACILITIES
     { cat: '🏗️ Building (BB6)', items: [
-      { month: 0, label: 'BB6 Equipment Plan (ED + IT)', tbd: false, complete: false, behind: false },
-      { month: 0, label: 'Itemized Equipment List (Deliverable)', tbd: false, complete: false, behind: false },
-      { month: 0, label: 'Facilities / IT Status Meeting for Advancement', tbd: false, complete: false, behind: false },
-      { month: 0, label: 'Mar 24: Architect Visit to CalArts', tbd: false, complete: false, behind: false },
-      { month: 2, label: '⏳ BB6 Construction Handover (End of May target)', tbd: true, complete: false, behind: false },
-      { month: 3, label: 'BB6 Complete (Hard Deadline)', tbd: false, complete: false, behind: false },
+      { month: 0, label: 'BB6 Equipment Plan (ED + IT)', tbd: false },
+      { month: 0, label: 'Itemized Equipment List (Deliverable)', tbd: false },
+      { month: 0, label: 'Facilities / IT Status Meeting for Advancement', tbd: false },
+      { month: 0, label: 'Mar 24: Architect Visit to CalArts', tbd: false },
+      { month: 2, label: '⏳ BB6 Construction Handover (End of May target)', tbd: true },
+      { month: 3, label: 'BB6 Complete (Hard Deadline)', tbd: false },
     ]},
     // EVENTS & PROGRAMMING
     { cat: '🎪 Events & Programming', items: [
-      { month: 1, label: 'Apr 9: Mashinka Firenzi Hakopian (Speaker Series #2)', tbd: false, complete: false, behind: false },
-      { month: 1, label: 'Apr 9: IDEA Grant Event — Algorithmic Justice in the Wild', tbd: false, complete: false, behind: false },
-      { month: 4, label: '⏳ Orientation Event (Speaker Series #3) — Open House + Demos', tbd: true, complete: false, behind: false },
-      { month: 5, label: '⏳ Faculty/Staff Open House & Center Walkthrough', tbd: true, complete: false, behind: false },
-      { month: 5, label: '⏳ Ribbon Cutting / Center Launch', tbd: true, complete: false, behind: false },
-      { month: 6, label: '⏳ Fall Programming with Visiting Artists', tbd: true, complete: false, behind: false },
+      { month: 1, label: 'Apr 9: Mashinka Firenzi Hakopian (Speaker Series #2)', tbd: false },
+      { month: 1, label: 'Apr 9: IDEA Grant Event — Algorithmic Justice in the Wild', tbd: false },
+      { month: 4, label: '⏳ Orientation Event (Speaker Series #3) — Open House + Demos', tbd: true },
+      { month: 5, label: '⏳ Faculty/Staff Open House & Center Walkthrough', tbd: true },
+      { month: 5, label: '⏳ Ribbon Cutting / Center Launch', tbd: true },
+      { month: 6, label: '⏳ Fall Programming with Visiting Artists', tbd: true },
     ]},
     // CURATION & RESEARCH
     { cat: '🎨 Curation & Research', items: [
-      { month: 1, label: '⏳ Lumi LA Visit — Studio Visits + Budget/Curation Model', tbd: true, complete: false, behind: false },
-      { month: 2, label: '⏳ Research Agendas Defined', tbd: true, complete: false, behind: false },
-      { month: 2, label: '⏳ Faculty Fellow Selection Begins', tbd: true, complete: false, behind: false },
-      { month: 3, label: '⏳ Discovery Tour (ED + Curator)', tbd: true, complete: false, behind: false },
-      { month: 3, label: '⏳ Fellowship Framework Launched', tbd: true, complete: false, behind: false },
-      { month: 6, label: '⏳ Research Agenda Launch', tbd: true, complete: false, behind: false },
-      { month: 6, label: '⏳ Year 2 Research + Artist Program Revealed', tbd: true, complete: false, behind: false },
+      { month: 1, label: '⏳ Lumi LA Visit — Studio Visits + Budget/Curation Model', tbd: true },
+      { month: 2, label: '⏳ Research Agendas Defined', tbd: true },
+      { month: 2, label: '⏳ Faculty Fellow Selection Begins', tbd: true },
+      { month: 3, label: '⏳ Discovery Tour (ED + Curator)', tbd: true },
+      { month: 3, label: '⏳ Fellowship Framework Launched', tbd: true },
+      { month: 6, label: '⏳ Research Agenda Launch', tbd: true },
+      { month: 6, label: '⏳ Year 2 Research + Artist Program Revealed', tbd: true },
     ]},
     // COMMUNICATIONS & REPORTING
     { cat: '📣 Reporting & Deliverables', items: [
-      { month: 0, label: 'Tech Notes + Takeaways Shared with Yana, Ravi, Provost', tbd: false, complete: false, behind: false },
-      { month: 0, label: 'Mar 27: Presentation to Yana Peel', tbd: false, complete: false, behind: false },
-      { month: 0, label: 'Due Mar 20: Preliminary Plan for MC/Lumi Discovery Tour', tbd: false, complete: false, behind: false },
-      { month: 0, label: 'Due Mar 20: Fall Programming with Artists Plan', tbd: false, complete: false, behind: false },
-      { month: 4, label: '⏳ Full Team Announcement', tbd: true, complete: false, behind: false },
-      { month: 12, label: '⏳ Symposium and White Paper (CCAT Major Contribution)', tbd: true, complete: false, behind: false },
+      { month: 0, label: 'Tech Notes + Takeaways Shared with Yana, Ravi, Provost', tbd: false },
+      { month: 0, label: 'Mar 27: Presentation to Yana Peel', tbd: false },
+      { month: 0, label: 'Due Mar 20: Preliminary Plan for MC/Lumi Discovery Tour', tbd: false },
+      { month: 0, label: 'Due Mar 20: Fall Programming with Artists Plan', tbd: false },
+      { month: 4, label: '⏳ Full Team Announcement', tbd: true },
+      { month: 12, label: '⏳ Symposium and White Paper (CCAT Major Contribution)', tbd: true },
     ]},
     // ACADEMIC CALENDAR
     { cat: '🎓 Academic Calendar', items: [
-      { month: 2, label: 'May 15: CalArts Graduation', tbd: false, complete: false, behind: false },
-      { month: 5, label: '⏳ New Student Orientation (Mid-Aug → Early Sep)', tbd: true, complete: false, behind: false },
-      { month: 5, label: '⏳ Faculty In-Service Days (Early Aug)', tbd: true, complete: false, behind: false },
+      { month: 2, label: 'May 15: CalArts Graduation', tbd: false },
+      { month: 5, label: '⏳ New Student Orientation (Mid-Aug → Early Sep)', tbd: true },
+      { month: 5, label: '⏳ Faculty In-Service Days (Early Aug)', tbd: true },
     ]},
   ];
 
   let currentRow = 7;
+
+  const statusValidation = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['Complete', 'Behind', ''], true)
+    .setAllowInvalid(false)
+    .build();
 
   milestones.forEach(section => {
     // Section header
@@ -2977,23 +2993,39 @@ function createFullYearTimelineSheet_(ss) {
     currentRow++;
 
     section.items.forEach(item => {
+      // Look up saved status from column B (persisted across refreshes)
+      const status = savedStatuses[item.label] || '';
+      const isComplete = status === 'Complete';
+      const isBehind = status === 'Behind';
+
+      // Column A: label
       sheet.getRange(currentRow, 1).setValue(item.label);
-      if (item.complete) {
+      if (isComplete) {
         sheet.getRange(currentRow, 1).setFontColor('#2E7D32');
-      } else if (item.behind) {
+      } else if (isBehind) {
         sheet.getRange(currentRow, 1).setFontColor('#B71C1C');
       } else if (item.tbd) {
         sheet.getRange(currentRow, 1).setFontColor('#9C27B0');
       }
-      // Place marker in the correct month column
-      const markerCol = item.month + 2;
+
+      // Column B: Status dropdown (restored from saved data)
+      const statusCell = sheet.getRange(currentRow, 2);
+      statusCell.setDataValidation(statusValidation).setHorizontalAlignment('center').setFontSize(10);
+      if (status) {
+        statusCell.setValue(status);
+        statusCell.setBackground(isComplete ? '#C8E6C9' : '#FFCDD2');
+        statusCell.setFontColor(isComplete ? '#2E7D32' : '#B71C1C');
+        statusCell.setFontWeight('bold');
+      }
+
+      // Place marker in the correct month column (shifted +1 for Status col)
+      const markerCol = item.month + 3;
       if (markerCol <= headerRow.length) {
         let marker, bgColor;
-        if (item.complete) {
+        if (isComplete) {
           marker = '✅';
           bgColor = '#C8E6C9';
-        } else if (item.behind) {
-          // Extract date from label even for behind items
+        } else if (isBehind) {
           const behindDateMatch = item.label.match(/(?:By\s+)?((?:Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2})/i);
           marker = behindDateMatch ? behindDateMatch[1] : '🚨';
           bgColor = '#FFCDD2';
@@ -3001,7 +3033,6 @@ function createFullYearTimelineSheet_(ss) {
           marker = '⏳';
           bgColor = '#F3E5F5';
         } else {
-          // Extract date from label for confirmed milestones (e.g. "Mar 13", "Apr 9", "May 12 – May 23")
           const dateMatch = item.label.match(/(?:By\s+)?((?:Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2})/i);
           marker = dateMatch ? dateMatch[1] : '🎯';
           bgColor = '#E3F2FD';
@@ -3009,7 +3040,7 @@ function createFullYearTimelineSheet_(ss) {
         const cell = sheet.getRange(currentRow, markerCol);
         cell.setValue(marker).setHorizontalAlignment('center').setBackground(bgColor);
         cell.setFontSize(marker.length <= 3 ? 12 : 9);
-        if (item.behind) {
+        if (isBehind) {
           cell.setFontWeight('bold').setFontColor('#B71C1C');
         } else if (marker !== '⏳' && marker !== '✅' && marker !== '🎯') {
           cell.setFontWeight('bold').setFontColor('#1565C0');
@@ -3023,11 +3054,12 @@ function createFullYearTimelineSheet_(ss) {
 
   // Format
   sheet.setColumnWidth(1, 380);
-  for (let c = 2; c <= headerRow.length; c++) {
+  sheet.setColumnWidth(2, 90);  // Status column
+  for (let c = 3; c <= headerRow.length; c++) {
     sheet.setColumnWidth(c, 85);
   }
   sheet.setFrozenRows(5);
-  sheet.setFrozenColumns(1);
+  sheet.setFrozenColumns(2);
 
   return sheet;
 }
@@ -3268,11 +3300,11 @@ function createNext4WeeksSheet_(ss) {
   const fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
   if (fytSheet) {
     const fytData = fytSheet.getDataRange().getValues();
-    // Row 5 (index 4) has month headers; data starts at row 7 (index 6)
+    // Row 5 (index 4) has month headers; col 0=Category, col 1=Status, col 2+=months
     const monthHeaders = fytData[4] || [];
-    // Parse month headers to date ranges
+    // Parse month headers to date ranges (start from col 2)
     const monthDates = [];
-    for (let c = 1; c < monthHeaders.length; c++) {
+    for (let c = 2; c < monthHeaders.length; c++) {
       const mStr = String(monthHeaders[c]).trim();
       if (mStr) {
         const parsed = new Date(mStr + ' 1');
@@ -3287,9 +3319,10 @@ function createNext4WeeksSheet_(ss) {
     for (let r = 6; r < fytData.length; r++) {
       const row = fytData[r];
       const cellA = String(row[0] || '').trim();
+      const cellB = String(row[1] || '').trim(); // Status column
 
-      // Detect category headers (dark bg rows with emoji prefix)
-      if (cellA && !row.slice(1).some(c => String(c).trim() !== '')) {
+      // Detect category headers (dark bg rows with emoji prefix, no status or markers)
+      if (cellA && !cellB && !row.slice(2).some(c => String(c).trim() !== '')) {
         if (/^[^\w\s]/.test(cellA) && cellA.length > 2) {
           currentCategory = cellA;
           continue;
@@ -3298,15 +3331,20 @@ function createNext4WeeksSheet_(ss) {
 
       if (!cellA) continue;
 
-      // Find which month column has a marker
+      // Find which month column has a marker (col 2+ in data)
       let markerMonth = null;
-      for (let c = 1; c < row.length; c++) {
+      for (let c = 2; c < row.length; c++) {
         const val = String(row[c]).trim();
-        if (val === '🎯' || val === '⏳' || val === '✅') {
-          // Find corresponding monthDate
+        // Markers can be: ✅, ⏳, 🎯, 🚨, or a date string like "Mar 13"
+        if (val === '🎯' || val === '⏳' || val === '✅' || val === '🚨' ||
+            /^(?:Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}$/i.test(val)) {
           const md = monthDates.find(m => m.col === c);
           if (md) {
-            markerMonth = { date: md, marker: val };
+            // Normalize: use status column to determine effective marker
+            let effectiveMarker = val;
+            if (cellB === 'Complete') effectiveMarker = '✅';
+            else if (cellB === 'Behind') effectiveMarker = '🚨';
+            markerMonth = { date: md, marker: effectiveMarker };
           }
           break;
         }
@@ -3323,8 +3361,9 @@ function createNext4WeeksSheet_(ss) {
         sheet.getRange(currentRow, 1).setFontColor('#9C27B0');
       }
       sheet.getRange(currentRow, 3).setValue(currentCategory || 'Timeline');
-      sheet.getRange(currentRow, 4).setValue(markerMonth.marker === '✅' ? 'Complete' : 'Upcoming');
-      sheet.getRange(currentRow, 4).setBackground(markerMonth.marker === '✅' ? statusColors['Complete'] : statusColors['Upcoming']);
+      const fytStatus = markerMonth.marker === '✅' ? 'Complete' : markerMonth.marker === '🚨' ? 'Behind' : 'Upcoming';
+      sheet.getRange(currentRow, 4).setValue(fytStatus);
+      sheet.getRange(currentRow, 4).setBackground(fytStatus === 'Complete' ? statusColors['Complete'] : fytStatus === 'Behind' ? statusColors['Blocked'] : statusColors['Upcoming']);
 
       // For milestones with specific dates in their label, try to place in exact week
       const dateMatch = cellA.match(/(?:Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}/i) ||
