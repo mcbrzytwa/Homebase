@@ -2329,7 +2329,7 @@ function createNext4WeeksSheet_(ss) {
   sheet.getRange(4, 1, 1, headerRow.length).setValues([headerRow]);
   sheet.getRange(4, 1, 1, headerRow.length).setFontWeight('bold').setBackground('#1a73e8').setFontColor('#FFFFFF');
 
-  // Pre-populated near-term items
+  // Pre-populated near-term items (Sprint 3: Mar 14-27, Sprint 4: Mar 28 - Apr 10)
   // Week 0 = Mar 14-20, Week 1 = Mar 21-27, Week 2 = Mar 28 - Apr 3, Week 3 = Apr 4-10
   const nearTermItems = [
     { section: '📋 DELIVERABLES DUE Fri Mar 20 (before Yana presentation)', items: [
