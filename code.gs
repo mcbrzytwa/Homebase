@@ -2908,7 +2908,7 @@ function createFullYearTimelineSheet_(ss) {
   const milestones = [
     // HIRING
     { cat: '👥 Hiring', items: [
-      { month: 0, label: 'Phase 1: Internal JD Approval (By Mar 13)', tbd: false, complete: true },
+      { month: 0, label: 'Phase 1: Internal JD Approval (By Mar 13)', tbd: false, complete: false },
       { month: 0, label: 'Phase 2: Finalize & Post JDs (By Mar 20)', tbd: false, complete: false },
       { month: 0, label: 'Phase 3: Open Search Window (Mar 20 – Apr 27)', tbd: false, complete: false },
       { month: 1, label: 'Phase 3 continues (Mar 20 – Apr 27)', tbd: false, complete: false },
@@ -2953,7 +2953,7 @@ function createFullYearTimelineSheet_(ss) {
     ]},
     // COMMUNICATIONS & REPORTING
     { cat: '📣 Reporting & Deliverables', items: [
-      { month: 0, label: 'Tech Notes + Takeaways Shared with Yana, Ravi, Provost', tbd: false, complete: true },
+      { month: 0, label: 'Tech Notes + Takeaways Shared with Yana, Ravi, Provost', tbd: false, complete: false },
       { month: 0, label: 'Mar 27: Presentation to Yana Peel', tbd: false, complete: false },
       { month: 0, label: 'Due Mar 20: Preliminary Plan for MC/Lumi Discovery Tour', tbd: false, complete: false },
       { month: 0, label: 'Due Mar 20: Fall Programming with Artists Plan', tbd: false, complete: false },
