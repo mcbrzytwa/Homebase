@@ -201,13 +201,15 @@ function onOpen() {
     .addSeparator()
     .addItem('🗺️ View System Map', 'showSystemMap')
     .addSeparator()
+    .addItem('📋 Process Granola Meeting Notes', 'showGranolaProcessingDialog')
+    .addSeparator()
     .addSubMenu(ui.createMenu('⚙️ Setup')
       .addItem('🚀 Initial Setup (Create Satellites)', 'initialSetup')
       .addItem('🔧 Fix Formula References', 'fixFormulaReferences')
       .addItem('📝 Update Config Email', 'promptForEmail')
       .addItem('📝 Setup OKR Change Tracking', 'setupOKRChangeTracking'))
     .addToUi();
-  
+
   // Build navigation menu for internal sheets
   buildNavigationMenus_(ui);
 }
@@ -9439,4 +9441,343 @@ function addAdvancementCheckIn() {
   Logger.log('');
   Logger.log('SUCCESS! Now add this to CONFIG.checkIns:');
   Logger.log("{ name: 'Advancement', templateSheet: 'Advancement Check-In Template', activeSheet: 'Advancement Check-In', title: 'Advancement Team Check-In', type: 'checkin' },");
+}
+
+
+// ============================================================================
+// GRANOLA MEETING NOTES PROCESSING
+// ============================================================================
+
+/**
+ * Shows the dialog for processing Granola meeting notes into a satellite check-in.
+ * This is used for ad-hoc meetings that don't have their own recurring check-in.
+ */
+function showGranolaProcessingDialog() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = ss.getSheetByName(CONFIG.sheets.satelliteConfig);
+
+  if (!configSheet) {
+    SpreadsheetApp.getUi().alert(
+      '⚙️ Setup Required',
+      'Satellite workbooks have not been created yet.\n\nPlease run: 🎛️ CCAT System → ⚙️ Setup → 🚀 Initial Setup',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    return;
+  }
+
+  // Build satellite options from config
+  const data = configSheet.getDataRange().getValues();
+  const options = [];
+  for (let i = 1; i < data.length; i++) {
+    const name = data[i][0];
+    const satelliteId = data[i][1];
+    if (satelliteId && name) {
+      // Skip OKR and Advancement satellites — they have different sheet structures
+      const checkIn = CONFIG.checkIns.find(c => c.name === name);
+      if (checkIn && (checkIn.type === 'okr' || checkIn.type === 'advancement')) continue;
+      options.push({ name: name, id: satelliteId });
+    }
+  }
+
+  if (options.length === 0) {
+    SpreadsheetApp.getUi().alert('No satellite workbooks found. Please run Initial Setup first.');
+    return;
+  }
+
+  const optionsHtml = options.map(o =>
+    `<option value="${o.id}">${o.name}</option>`
+  ).join('\n');
+
+  const html = HtmlService.createHtmlOutput(`
+    <style>
+      body { font-family: Arial, sans-serif; padding: 16px; }
+      label { font-weight: bold; display: block; margin-top: 12px; margin-bottom: 4px; }
+      select, input, textarea { width: 100%; padding: 8px; box-sizing: border-box; font-size: 14px; }
+      textarea { height: 200px; font-family: monospace; font-size: 12px; }
+      .hint { font-size: 12px; color: #666; margin-top: 2px; }
+      button { margin-top: 16px; padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
+      button:hover { background: #1557b0; }
+      button:disabled { background: #ccc; cursor: not-allowed; }
+      .error { color: red; margin-top: 8px; }
+    </style>
+
+    <label>Which satellite check-in?</label>
+    <select id="satelliteSelect">
+      ${optionsHtml}
+    </select>
+
+    <label>Participants (comma-separated emails)</label>
+    <input type="text" id="participants" placeholder="user1@example.com, user2@example.com" />
+    <div class="hint">Used for sending meeting summaries after processing.</div>
+
+    <label>Paste Granola meeting notes below:</label>
+    <textarea id="granolaNotesText" placeholder="Paste your Granola meeting notes here..."></textarea>
+    <div class="hint">Granola notes will be processed by Claude to extract action items, decisions, and agenda topics.</div>
+
+    <div id="errorMsg" class="error"></div>
+    <button id="processBtn" onclick="processNotes()">📋 Process Meeting Notes</button>
+
+    <script>
+      function processNotes() {
+        var satelliteId = document.getElementById('satelliteSelect').value;
+        var participants = document.getElementById('participants').value;
+        var notes = document.getElementById('granolaNotesText').value;
+        var btn = document.getElementById('processBtn');
+        var errorMsg = document.getElementById('errorMsg');
+
+        if (!notes.trim()) {
+          errorMsg.textContent = 'Please paste meeting notes before processing.';
+          return;
+        }
+
+        errorMsg.textContent = '';
+        btn.disabled = true;
+        btn.textContent = 'Processing...';
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              btn.textContent = '✅ Done!';
+              setTimeout(function() { google.script.host.close(); }, 1500);
+            } else {
+              errorMsg.textContent = result.error || 'Processing failed.';
+              btn.disabled = false;
+              btn.textContent = '📋 Process Meeting Notes';
+            }
+          })
+          .withFailureHandler(function(err) {
+            errorMsg.textContent = 'Error: ' + err.message;
+            btn.disabled = false;
+            btn.textContent = '📋 Process Meeting Notes';
+          })
+          .processGranolaMeetingNotes(satelliteId, participants, notes);
+      }
+    </script>
+  `)
+  .setWidth(500)
+  .setHeight(550);
+
+  SpreadsheetApp.getUi().showModalDialog(html, '📋 Process Granola Meeting Notes');
+}
+
+
+/**
+ * Processes pasted Granola meeting notes and writes them to a satellite check-in sheet.
+ * Parses the notes to extract agenda topics, decisions, and action items.
+ *
+ * @param {string} satelliteId - The spreadsheet ID of the target satellite
+ * @param {string} participants - Comma-separated email addresses
+ * @param {string} notesText - Raw Granola meeting notes text
+ * @returns {Object} { success: boolean, error?: string }
+ */
+function processGranolaMeetingNotes(satelliteId, participants, notesText) {
+  try {
+    const satellite = SpreadsheetApp.openById(satelliteId);
+    const sheet = satellite.getSheetByName('Check-In');
+
+    if (!sheet) {
+      return { success: false, error: 'Check-In sheet not found in satellite workbook.' };
+    }
+
+    // Parse the Granola notes
+    const parsed = parseGranolaNotes_(notesText);
+
+    // Write agenda topics (rows 11-19, columns A-D)
+    if (parsed.agenda.length > 0) {
+      const agendaRows = Math.min(parsed.agenda.length, 9);
+      const agendaData = parsed.agenda.slice(0, 9).map(item => [
+        item.topic || '',
+        item.owner || '',
+        item.notes || '',
+        '',  // Link
+        ''   // Extra column
+      ]);
+      sheet.getRange(11, 1, agendaRows, 5).setValues(agendaData);
+    }
+
+    // Write decisions (rows 22-28, columns A-E)
+    if (parsed.decisions.length > 0) {
+      const decisionRows = Math.min(parsed.decisions.length, 7);
+      const decisionData = parsed.decisions.slice(0, 7).map(item => [
+        item.decision || '',
+        item.owner || '',
+        item.impact || '',
+        item.followUp || '',
+        ''  // Link
+      ]);
+      sheet.getRange(22, 1, decisionRows, 5).setValues(decisionData);
+    }
+
+    // Write action items (rows 31-37, columns A-E)
+    if (parsed.actions.length > 0) {
+      const actionRows = Math.min(parsed.actions.length, 7);
+      const actionData = parsed.actions.slice(0, 7).map(item => [
+        item.task || '',
+        item.owner || '',
+        item.dueDate || '',
+        'Pending',
+        ''  // Link
+      ]);
+      sheet.getRange(31, 1, actionRows, 5).setValues(actionData);
+    }
+
+    // Log the processing in the satellite's properties
+    const props = PropertiesService.getDocumentProperties();
+    props.setProperty('LAST_GRANOLA_SYNC', new Date().toISOString());
+    props.setProperty('LAST_GRANOLA_PARTICIPANTS', participants);
+
+    // Send summary email to participants if provided
+    if (participants && participants.trim()) {
+      sendGranolaSummaryEmail_(satellite.getName(), participants, parsed);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Granola processing error: ' + error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+
+/**
+ * Parses raw Granola meeting notes text into structured data.
+ * Looks for common patterns: headings, bullet points, action items, decisions.
+ *
+ * @param {string} text - Raw meeting notes
+ * @returns {Object} { agenda: [], decisions: [], actions: [] }
+ */
+function parseGranolaNotes_(text) {
+  const result = { agenda: [], decisions: [], actions: [] };
+
+  if (!text || !text.trim()) return result;
+
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+
+  let currentSection = 'agenda'; // Default section
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+
+    // Detect section headers
+    if (lower.match(/^#+\s*(action\s*items?|tasks?|to.?dos?|next\s*steps?)/i) ||
+        lower.match(/^(action\s*items?|tasks?|to.?dos?|next\s*steps?)\s*:?\s*$/i)) {
+      currentSection = 'actions';
+      continue;
+    }
+    if (lower.match(/^#+\s*(decisions?|agreed|resolved)/i) ||
+        lower.match(/^(decisions?|agreed|resolved)\s*:?\s*$/i)) {
+      currentSection = 'decisions';
+      continue;
+    }
+    if (lower.match(/^#+\s*(agenda|topics?|discussion|key\s*points?|summary|notes?|overview)/i) ||
+        lower.match(/^(agenda|topics?|discussion|key\s*points?|summary|notes?|overview)\s*:?\s*$/i)) {
+      currentSection = 'agenda';
+      continue;
+    }
+
+    // Skip empty or purely decorative lines
+    if (line.match(/^[-=_*]{3,}$/)) continue;
+
+    // Clean bullet markers
+    const cleaned = line.replace(/^[\s*\-•→>]+\s*/, '').trim();
+    if (!cleaned) continue;
+
+    // Parse based on current section
+    if (currentSection === 'actions') {
+      const actionMatch = cleaned.match(/^(.+?)(?:\s*[-–—]\s*(.+?))?(?:\s*(?:by|due|deadline)\s*:?\s*(.+))?$/i);
+      if (actionMatch) {
+        result.actions.push({
+          task: actionMatch[1].trim(),
+          owner: (actionMatch[2] || '').trim(),
+          dueDate: (actionMatch[3] || '').trim()
+        });
+      }
+    } else if (currentSection === 'decisions') {
+      const decisionMatch = cleaned.match(/^(.+?)(?:\s*[-–—]\s*(.+?))?$/);
+      if (decisionMatch) {
+        result.decisions.push({
+          decision: decisionMatch[1].trim(),
+          owner: (decisionMatch[2] || '').trim(),
+          impact: '',
+          followUp: ''
+        });
+      }
+    } else {
+      // Agenda / general notes
+      result.agenda.push({
+        topic: cleaned,
+        owner: '',
+        notes: ''
+      });
+    }
+  }
+
+  // If everything ended up in agenda and there are no explicit sections,
+  // try to auto-detect action items from the agenda
+  if (result.actions.length === 0 && result.decisions.length === 0) {
+    const agendaCopy = [...result.agenda];
+    result.agenda = [];
+
+    for (const item of agendaCopy) {
+      const t = item.topic.toLowerCase();
+      if (t.match(/\b(will|should|need to|must|action|follow.?up|todo|to.do)\b/) &&
+          t.match(/\b(send|create|schedule|review|update|check|prepare|draft|submit|contact|reach out|set up)\b/)) {
+        result.actions.push({
+          task: item.topic,
+          owner: '',
+          dueDate: ''
+        });
+      } else if (t.match(/\b(decided|agreed|approved|confirmed|resolved)\b/)) {
+        result.decisions.push({
+          decision: item.topic,
+          owner: '',
+          impact: '',
+          followUp: ''
+        });
+      } else {
+        result.agenda.push(item);
+      }
+    }
+  }
+
+  return result;
+}
+
+
+/**
+ * Sends a summary email to meeting participants after Granola notes are processed.
+ *
+ * @param {string} satelliteName - Name of the satellite workbook
+ * @param {string} participantsCsv - Comma-separated email addresses
+ * @param {Object} parsed - Parsed notes with agenda, decisions, actions
+ */
+function sendGranolaSummaryEmail_(satelliteName, participantsCsv, parsed) {
+  const emails = participantsCsv.split(',').map(e => e.trim()).filter(e => e);
+  if (emails.length === 0) return;
+
+  const agendaList = parsed.agenda.map(a => `• ${a.topic}`).join('\n') || '(none)';
+  const decisionList = parsed.decisions.map(d => `• ${d.decision}`).join('\n') || '(none)';
+  const actionList = parsed.actions.map(a => {
+    let line = `• ${a.task}`;
+    if (a.owner) line += ` (${a.owner})`;
+    if (a.dueDate) line += ` — due: ${a.dueDate}`;
+    return line;
+  }).join('\n') || '(none)';
+
+  const subject = `Meeting Summary — ${satelliteName} — ${new Date().toLocaleDateString()}`;
+  const body = `Meeting notes have been processed and logged to: ${satelliteName}\n\n` +
+    `AGENDA / KEY TOPICS:\n${agendaList}\n\n` +
+    `DECISIONS:\n${decisionList}\n\n` +
+    `ACTION ITEMS:\n${actionList}\n\n` +
+    `— Sent from CCAT Homebase`;
+
+  try {
+    MailApp.sendEmail({
+      to: emails.join(','),
+      subject: subject,
+      body: body
+    });
+  } catch (e) {
+    console.error('Failed to send Granola summary email: ' + e.message);
+  }
 }
