@@ -5403,10 +5403,10 @@ var CA_ACCENTS = [CA.navy, CA.teal, CA.coral, CA.orange, CA.purple, CA.green];
 // ---- Slide Builder Helpers ----
 
 /**
- * Adds CalArts branding: teal "CalARTS" bottom-right of every slide.
+ * Adds CalArts branding: teal "CalArts" bottom-right of every slide.
  */
 function addCalArtsBranding_(slide) {
-  var brand = slide.insertTextBox('CalARTS', 600, 490, 100, 25);
+  var brand = slide.insertTextBox('CalArts', 600, 490, 100, 25);
   brand.getText().getTextStyle()
     .setFontSize(14).setBold(true).setForegroundColor(CA.teal).setFontFamily(CA.font);
   brand.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.END);
