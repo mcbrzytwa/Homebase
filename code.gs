@@ -1760,7 +1760,7 @@ function createMasterRACISheet_() {
   }
   
   const headers = [
-    'Satellite Source', 'Task / Action Item', 'Owner', 'Due Date', 'Status',
+    'Satellite Source', 'Task / Action Item', '📊', 'Owner', 'Due Date', 'Status',
     'Priority', 'Sprint', 'Decision Context', 'Last Updated'
   ];
   raciSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -1768,25 +1768,33 @@ function createMasterRACISheet_() {
     .setFontWeight('bold')
     .setBackground('#1a73e8')
     .setFontColor('white');
-  
+
   raciSheet.setColumnWidth(1, 160);
   raciSheet.setColumnWidth(2, 350);
-  raciSheet.setColumnWidth(3, 130);
-  raciSheet.setColumnWidth(4, 110);
-  raciSheet.setColumnWidth(5, 100);
-  raciSheet.setColumnWidth(6, 70);
-  raciSheet.setColumnWidth(7, 90);
-  raciSheet.setColumnWidth(8, 250);
-  raciSheet.setColumnWidth(9, 130);
-  
+  raciSheet.setColumnWidth(3, 35);   // 📊 Deck checkbox — narrow
+  raciSheet.setColumnWidth(4, 130);
+  raciSheet.setColumnWidth(5, 110);
+  raciSheet.setColumnWidth(6, 100);
+  raciSheet.setColumnWidth(7, 70);
+  raciSheet.setColumnWidth(8, 90);
+  raciSheet.setColumnWidth(9, 250);
+  raciSheet.setColumnWidth(10, 130);
+
   raciSheet.setFrozenRows(1);
-  
-  // Status dropdown (allow invalid so programmatic writes from refreshMasterRACI succeed)
+
+  // Checkbox validation for Deck column (Col C = column 3)
+  const checkboxRule = SpreadsheetApp.newDataValidation()
+    .requireCheckbox()
+    .setAllowInvalid(false)
+    .build();
+  raciSheet.getRange('C2:C500').setDataValidation(checkboxRule);
+
+  // Status dropdown (Col F = column 6, shifted from old Col E)
   const statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(CONFIG.dropdownOptions.actionStatus, true)
     .setAllowInvalid(true)
     .build();
-  raciSheet.getRange('E2:E500').setDataValidation(statusRule);
+  raciSheet.getRange('F2:F500').setDataValidation(statusRule);
   
   return raciSheet;
 }
@@ -2374,6 +2382,7 @@ function refreshMasterRACI() {
       allActions.push([
         checkIn.name,             // Satellite Source
         row[0],                   // Task
+        false,                    // 📊 Deck (unchecked by default)
         row[1],                   // Owner
         row[2],                   // Due Date
         row[3] || 'Not Started',  // Status
@@ -2394,6 +2403,7 @@ function refreshMasterRACI() {
         allActions.push([
           checkIn.name,
           '↳ Follow-up: ' + row[3],
+          false,                    // 📊 Deck
           row[1],
           '',
           'Not Started',
@@ -2408,7 +2418,7 @@ function refreshMasterRACI() {
   
   // Write all actions to master RACI
   if (allActions.length > 0) {
-    raciSheet.getRange(2, 1, allActions.length, 9).setValues(allActions);
+    raciSheet.getRange(2, 1, allActions.length, 10).setValues(allActions);
     
     // Color-code by satellite source
     const sourceColors = {};
@@ -2875,15 +2885,20 @@ function setupTimelines() {
 function createFullYearTimelineSheet_(ss) {
   let sheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
 
-  // Read existing statuses before clearing (keyed by milestone label)
+  // Read existing statuses AND deck flags before clearing (keyed by milestone label)
   const savedStatuses = {};
+  const savedDeckFlags = {};
   if (sheet) {
     const data = sheet.getDataRange().getValues();
     for (let r = 0; r < data.length; r++) {
       const label = String(data[r][0] || '').trim();
-      const status = String(data[r][1] || '').trim();
+      const deckVal = data[r][1]; // Col B = Deck checkbox
+      const status = String(data[r][2] || '').trim(); // Col C = Status
       if (label && (status === 'Complete' || status === 'Behind')) {
         savedStatuses[label] = status;
+      }
+      if (label && deckVal === true) {
+        savedDeckFlags[label] = true;
       }
     }
     sheet.clear();
@@ -2894,7 +2909,7 @@ function createFullYearTimelineSheet_(ss) {
   // Title
   sheet.getRange('A1').setValue('📅 CCAT Full Year Timeline (FY2027)');
   sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
-  sheet.getRange('A2').setValue('Last updated: ' + new Date().toLocaleString() + '  |  ✅ = Complete  |  🔴 = Behind Schedule  |  ⏳ = TBD  |  Dates shown for confirmed milestones');
+  sheet.getRange('A2').setValue('Last updated: ' + new Date().toLocaleString() + '  |  ✅ = Complete  |  🔴 = Behind Schedule  |  ⏳ = TBD  |  📊 = Show in Deck');
   sheet.getRange('A2').setFontStyle('italic').setFontColor('#666');
 
   // Months: Mar 2026 through Jun 2027 (16 months)
@@ -2920,8 +2935,8 @@ function createFullYearTimelineSheet_(ss) {
     'Q3 FY2027': '#FFF3E0', 'Q4 FY2027': '#F3E5F5'
   };
 
-  // Row 4: Quarter headers (merged) — start at col 3 (after Category + Status)
-  let col = 3;
+  // Row 4: Quarter headers (merged) — start at col 4 (after Category + Deck + Status)
+  let col = 4;
   const quarters = ['Q3 FY2026', 'Q4 FY2026', 'Q1 FY2027', 'Q2 FY2027', 'Q3 FY2027', 'Q4 FY2027'];
   const qWidths = [1, 3, 3, 3, 3, 3];
   quarters.forEach((q, i) => {
@@ -2930,20 +2945,24 @@ function createFullYearTimelineSheet_(ss) {
     col += qWidths[i];
   });
 
-  // Row 5: Month headers
-  const headerRow = ['Category', 'Status'].concat(months);
+  // Row 5: Month headers — Col A=Category, Col B=📊, Col C=Status, Col D+=months
+  const headerRow = ['Category', '📊', 'Status'].concat(months);
   sheet.getRange(5, 1, 1, headerRow.length).setValues([headerRow]);
   sheet.getRange(5, 1, 1, headerRow.length).setFontWeight('bold').setBackground('#e8eaed');
 
-  // Apply month background colors
+  // Apply month background colors (months now start at col 4)
   for (let c = 0; c < months.length; c++) {
     const qColor = quarterColors[quarterMap[months[c]]];
-    sheet.getRange(5, c + 3).setBackground(qColor);
+    sheet.getRange(5, c + 4).setBackground(qColor);
   }
 
-  // ---- PRE-POPULATED MILESTONES FROM YANA DECK + TRANSCRIPT ----
-  // Status (Complete / Behind) is now stored in column B of the sheet itself.
-  // Just set it in the Status column and refresh — no code changes needed.
+  // Checkbox validation for Deck column
+  const checkboxRule = SpreadsheetApp.newDataValidation()
+    .requireCheckbox()
+    .setAllowInvalid(false)
+    .build();
+
+  // ---- PRE-POPULATED MILESTONES ----
   const milestones = [
     // HIRING
     { cat: '👥 Hiring', items: [
@@ -3021,7 +3040,7 @@ function createFullYearTimelineSheet_(ss) {
     currentRow++;
 
     section.items.forEach(item => {
-      // Look up saved status from column B (persisted across refreshes)
+      // Look up saved status and deck flag (persisted across refreshes)
       const status = savedStatuses[item.label] || '';
       const isComplete = status === 'Complete';
       const isBehind = status === 'Behind';
@@ -3036,8 +3055,15 @@ function createFullYearTimelineSheet_(ss) {
         sheet.getRange(currentRow, 1).setFontColor('#9C27B0');
       }
 
-      // Column B: Status dropdown (restored from saved data)
-      const statusCell = sheet.getRange(currentRow, 2);
+      // Column B: 📊 Deck checkbox (restored from saved data)
+      const deckCell = sheet.getRange(currentRow, 2);
+      deckCell.setDataValidation(checkboxRule).setHorizontalAlignment('center');
+      if (savedDeckFlags[item.label]) {
+        deckCell.setValue(true);
+      }
+
+      // Column C: Status dropdown (restored from saved data)
+      const statusCell = sheet.getRange(currentRow, 3);
       statusCell.setDataValidation(statusValidation).setHorizontalAlignment('center').setFontSize(10);
       if (status) {
         statusCell.setValue(status);
@@ -3046,8 +3072,8 @@ function createFullYearTimelineSheet_(ss) {
         statusCell.setFontWeight('bold');
       }
 
-      // Place marker in the correct month column (shifted +1 for Status col)
-      const markerCol = item.month + 3;
+      // Place marker in the correct month column (col D = month 0, so month + 4)
+      const markerCol = item.month + 4;
       if (markerCol <= headerRow.length) {
         let marker, bgColor;
         if (isComplete) {
@@ -3082,12 +3108,13 @@ function createFullYearTimelineSheet_(ss) {
 
   // Format
   sheet.setColumnWidth(1, 380);
-  sheet.setColumnWidth(2, 90);  // Status column
-  for (let c = 3; c <= headerRow.length; c++) {
+  sheet.setColumnWidth(2, 35);   // 📊 Deck checkbox — narrow
+  sheet.setColumnWidth(3, 90);   // Status column
+  for (let c = 4; c <= headerRow.length; c++) {
     sheet.setColumnWidth(c, 85);
   }
   sheet.setFrozenRows(5);
-  sheet.setFrozenColumns(2);
+  sheet.setFrozenColumns(3);  // Freeze Category + Deck + Status
 
   return sheet;
 }
@@ -3150,8 +3177,8 @@ function createNext6SprintsSheet_(ss) {
   sheet.getRange('A2').setValue('Generated: ' + today.toLocaleString() + '  |  ⏳ = TBD date  |  Run "Refresh Next 6 Sprints" to update');
   sheet.getRange('A2').setFontStyle('italic').setFontColor('#666');
 
-  // Row 3: Sprint headers
-  const headerRow = ['Task / Milestone', 'Owner', 'Status'];
+  // Row 3: Sprint headers — Col A=Task, B=📊, C=Owner, D=Status, E-J=Sprints
+  const headerRow = ['Task / Milestone', '📊', 'Owner', 'Status'];
   const sprintColors = ['#C9A227', '#4285F4', '#0F9D58', '#AB47BC', '#FF7043', '#26A69A'];
   const sprintFontColors = ['#000000', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF'];
 
@@ -3160,13 +3187,19 @@ function createNext6SprintsSheet_(ss) {
   });
 
   sheet.getRange(3, 1, 1, headerRow.length).setValues([headerRow]);
-  sheet.getRange(3, 1, 1, 3).setFontWeight('bold').setBackground('#1a73e8').setFontColor('#FFFFFF');
+  sheet.getRange(3, 1, 1, 4).setFontWeight('bold').setBackground('#1a73e8').setFontColor('#FFFFFF');
   sprints.forEach((sp, i) => {
-    sheet.getRange(3, 4 + i).setFontWeight('bold').setBackground(sprintColors[i]).setFontColor(sprintFontColors[i])
+    sheet.getRange(3, 5 + i).setFontWeight('bold').setBackground(sprintColors[i]).setFontColor(sprintFontColors[i])
       .setHorizontalAlignment('center').setWrap(true).setFontSize(10);
   });
 
   sheet.setRowHeight(3, 50);
+
+  // Checkbox validation for Deck column
+  const checkboxRule = SpreadsheetApp.newDataValidation()
+    .requireCheckbox()
+    .setAllowInvalid(false)
+    .build();
 
   let currentRow = 5;
   const statusColors = { 'Complete': '#C8E6C9', 'In Progress': '#BBDEFB', 'Not Started': '#F5F5F5', 'Blocked': '#FFCDD2', 'Planning': '#FFF9C4', 'Upcoming': '#E1BEE7', 'Confirmed': '#DCEDC8' };
@@ -3201,16 +3234,17 @@ function createNext6SprintsSheet_(ss) {
       }
 
       sheet.getRange(currentRow, 1).setValue(row[0]);
-      sheet.getRange(currentRow, 2).setValue(row[1] || '');
+      sheet.getRange(currentRow, 2).setDataValidation(checkboxRule).setHorizontalAlignment('center'); // 📊 Deck checkbox
+      sheet.getRange(currentRow, 3).setValue(row[1] || '');  // Owner (shifted to col C)
       const status = row[3] || 'Not Started';
-      sheet.getRange(currentRow, 3).setValue(status);
-      sheet.getRange(currentRow, 3).setBackground(statusColors[status] || '#F5F5F5');
+      sheet.getRange(currentRow, 4).setValue(status);  // Status (shifted to col D)
+      sheet.getRange(currentRow, 4).setBackground(statusColors[status] || '#F5F5F5');
 
-      // Place marker in correct sprint column
+      // Place marker in correct sprint column (sprints now at col E-J = 5-10)
       for (let s = 0; s < 6; s++) {
         if (dueDate >= sprints[s].start && dueDate <= sprints[s].end) {
           const marker = row[0].toString().startsWith('⏳') ? '⏳' : '◆';
-          sheet.getRange(currentRow, 4 + s).setValue(marker).setHorizontalAlignment('center').setBackground('#E8EAF6');
+          sheet.getRange(currentRow, 5 + s).setValue(marker).setHorizontalAlignment('center').setBackground('#E8EAF6');
           break;
         }
       }
@@ -3231,19 +3265,21 @@ function createNext6SprintsSheet_(ss) {
   sheet.getRange(currentRow, 1).setValue('✏️ Manual Entries (add your own items below)');
   currentRow++;
   for (let i = 0; i < 10; i++) {
-    sheet.getRange(currentRow, 3).setBackground('#F5F5F5');
+    sheet.getRange(currentRow, 2).setDataValidation(checkboxRule).setHorizontalAlignment('center'); // 📊 checkbox
+    sheet.getRange(currentRow, 4).setBackground('#F5F5F5');  // Status col (shifted)
     currentRow++;
   }
 
   // Format
   sheet.setColumnWidth(1, 420);
-  sheet.setColumnWidth(2, 150);
-  sheet.setColumnWidth(3, 100);
-  for (let c = 4; c <= headerRow.length; c++) {
+  sheet.setColumnWidth(2, 35);   // 📊 Deck checkbox — narrow
+  sheet.setColumnWidth(3, 150);  // Owner
+  sheet.setColumnWidth(4, 100);  // Status
+  for (let c = 5; c <= headerRow.length; c++) {
     sheet.setColumnWidth(c, 130);
   }
   sheet.setFrozenRows(3);
-  sheet.setFrozenColumns(1);
+  sheet.setFrozenColumns(2);  // Freeze Task + Deck
 
   return sheet;
 }
@@ -3328,11 +3364,11 @@ function createNext4WeeksSheet_(ss) {
   const fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
   if (fytSheet) {
     const fytData = fytSheet.getDataRange().getValues();
-    // Row 5 (index 4) has month headers; col 0=Category, col 1=Status, col 2+=months
+    // Row 5 (index 4) has month headers; col 0=Category, col 1=📊 Deck, col 2=Status, col 3+=months
     const monthHeaders = fytData[4] || [];
-    // Parse month headers to date ranges (start from col 2)
+    // Parse month headers to date ranges (start from col 3)
     const monthDates = [];
-    for (let c = 2; c < monthHeaders.length; c++) {
+    for (let c = 3; c < monthHeaders.length; c++) {
       const mStr = String(monthHeaders[c]).trim();
       if (mStr) {
         const parsed = new Date(mStr + ' 1');
@@ -3347,10 +3383,10 @@ function createNext4WeeksSheet_(ss) {
     for (let r = 6; r < fytData.length; r++) {
       const row = fytData[r];
       const cellA = String(row[0] || '').trim();
-      const cellB = String(row[1] || '').trim(); // Status column
+      const cellC = String(row[2] || '').trim(); // Status column (shifted to col C)
 
       // Detect category headers (dark bg rows with emoji prefix, no status or markers)
-      if (cellA && !cellB && !row.slice(2).some(c => String(c).trim() !== '')) {
+      if (cellA && !cellC && !row.slice(3).some(c => String(c).trim() !== '')) {
         if (/^[^\w\s]/.test(cellA) && cellA.length > 2) {
           currentCategory = cellA;
           continue;
@@ -3359,9 +3395,9 @@ function createNext4WeeksSheet_(ss) {
 
       if (!cellA) continue;
 
-      // Find which month column has a marker (col 2+ in data)
+      // Find which month column has a marker (col 3+ in data)
       let markerMonth = null;
-      for (let c = 2; c < row.length; c++) {
+      for (let c = 3; c < row.length; c++) {
         const val = String(row[c]).trim();
         // Markers can be: ✅, ⏳, 🎯, 🚨, or a date string like "Mar 13"
         if (val === '🎯' || val === '⏳' || val === '✅' || val === '🚨' ||
@@ -3370,8 +3406,8 @@ function createNext4WeeksSheet_(ss) {
           if (md) {
             // Normalize: use status column to determine effective marker
             let effectiveMarker = val;
-            if (cellB === 'Complete') effectiveMarker = '✅';
-            else if (cellB === 'Behind') effectiveMarker = '🚨';
+            if (cellC === 'Complete') effectiveMarker = '✅';
+            else if (cellC === 'Behind') effectiveMarker = '🚨';
             markerMonth = { date: md, marker: effectiveMarker };
           }
           break;
@@ -3927,9 +3963,9 @@ function updateTimelinesFromMeeting_(ss, timelineUpdates, sourceMeeting) {
           !String(data[r][0]).startsWith('💰') && !String(data[r][0]).startsWith('🏗') &&
           !String(data[r][0]).startsWith('🎪') && !String(data[r][0]).startsWith('🎨') &&
           !String(data[r][0]).startsWith('📣') && !String(data[r][0]).startsWith('🎓')) {
-        // Find which month column has a marker
+        // Find which month column has a marker (months start at col D = index 3)
         let markerCol = -1;
-        for (let c = 1; c < data[r].length; c++) {
+        for (let c = 3; c < data[r].length; c++) {
           if (data[r][c] && String(data[r][c]).trim()) {
             markerCol = c;
             break;
@@ -4305,14 +4341,14 @@ function generateSprintDeckData() {
       const row = raciData[r];
       if (!row[1] || String(row[1]).trim() === '') continue;
       
-      const status = String(row[4] || '');
+      const status = String(row[5] || '');  // Col F = Status (shifted for 📊 Deck col)
       if (status.toLowerCase() === 'complete') continue;
-      
+
       deckSheet.getRange(currentRow, 1, 1, 5).setValues([[
         row[1], // Task
-        row[2], // Owner
-        row[3], // Due
-        row[4], // Status
+        row[3], // Owner (shifted)
+        row[4], // Due (shifted)
+        row[5], // Status (shifted)
         row[0]  // Source
       ]]);
       
@@ -5014,32 +5050,34 @@ function gatherPlannedMilestones_(ss) {
   const sprintInfo = getCurrentSprintInfo_(ss);
 
   // Get milestones from Full Year Timeline
+  // New columns: [0]=Category, [1]=📊 Deck, [2]=Status, [3+]=months
   const fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
   if (fytSheet) {
     const data = fytSheet.getDataRange().getValues();
     let currentCat = '';
     for (let r = 6; r < data.length; r++) {
       const label = String(data[r][0] || '').trim();
-      const status = String(data[r][1] || '').trim();
+      const status = String(data[r][2] || '').trim();  // Col C = Status
       if (!label) continue;
 
       // Category headers have no status and no markers
-      if (!status && !data[r].slice(2).some(c => String(c).trim() !== '')) {
+      if (!status && !data[r].slice(3).some(c => String(c).trim() !== '')) {
         if (/^[^\w\s]/.test(label) && label.length > 2) {
           currentCat = label;
           continue;
         }
       }
 
-      // Check for markers in month columns — find which month
-      for (let c = 2; c < data[r].length; c++) {
+      // Check for markers in month columns (now start at index 3)
+      for (let c = 3; c < data[r].length; c++) {
         const val = String(data[r][c]).trim();
         if (val && val !== '') {
           milestones.push({
             label: label,
             category: currentCat,
             status: status,
-            marker: val
+            marker: val,
+            inDeck: data[r][1] === true  // Col B = 📊 Deck flag
           });
           break;
         }
@@ -5048,18 +5086,20 @@ function gatherPlannedMilestones_(ss) {
   }
 
   // Also get completed action items from this sprint's RACI
+  // New columns: [0]=Satellite, [1]=Task, [2]=📊 Deck, [3]=Owner, [4]=Due, [5]=Status
   const raciSheet = ss.getSheetByName(CONFIG.sheets.masterRaci);
   if (raciSheet) {
     const raciData = raciSheet.getDataRange().getValues();
     for (let r = 1; r < raciData.length; r++) {
       const task = String(raciData[r][1] || '').trim();
-      const statusVal = String(raciData[r][4] || '').toLowerCase();
+      const statusVal = String(raciData[r][5] || '').toLowerCase();  // Col F = Status
       if (task && (statusVal === 'complete' || statusVal === 'done')) {
         milestones.push({
           label: task,
           category: '📋 Completed Action Items',
           status: 'Complete',
-          marker: '✅'
+          marker: '✅',
+          inDeck: raciData[r][2] === true  // Col C = 📊 Deck flag
         });
       }
     }
@@ -5961,9 +6001,12 @@ function buildNext6SprintsSlide_(deck, ss) {
   var data = n6Sheet.getDataRange().getValues();
   if (data.length < 4) { addCalArtsBranding_(slide); return; }
 
-  // Sprint column headers (row 3, cols D-I = index 3-8)
+  // Check if ANY rows have 📊 Deck checked — if so, filter to only those
+  var anyDeckFlagged = data.slice(3).some(function(row) { return row[1] === true; });
+
+  // Sprint column headers (row 3, cols E-J = index 4-9, after 📊 Deck col)
   var sprintHeaders = [];
-  for (var c = 3; c <= 8 && c < data[2].length; c++) {
+  for (var c = 4; c <= 9 && c < data[2].length; c++) {
     sprintHeaders.push(String(data[2][c] || '').replace(/\n/g, ' '));
   }
 
@@ -5998,8 +6041,10 @@ function buildNext6SprintsSlide_(deck, ss) {
     var task = String(data[r][0] || '').trim();
     if (!task) continue;
 
-    var hasMarkers = data[r].slice(3, 9).some(function(c2) { return String(c2).trim() !== ''; });
-    var statusVal = String(data[r][2] || '').trim();
+    // New indices: [1]=📊 Deck, [3]=Status, [4-9]=Sprints
+    var hasMarkers = data[r].slice(4, 10).some(function(c2) { return String(c2).trim() !== ''; });
+    var statusVal = String(data[r][3] || '').trim();  // Col D = Status
+    var inDeck = data[r][1] === true;  // Col B = 📊 Deck
 
     if (!hasMarkers && !statusVal) {
       // Section header row
@@ -6012,6 +6057,9 @@ function buildNext6SprintsSlide_(deck, ss) {
       rowCount++;
       continue;
     }
+
+    // Skip items not flagged for deck (if ANY items are flagged, filter to only those)
+    if (anyDeckFlagged && !inDeck) continue;
 
     var bgColor = rowCount % 2 === 0 ? '#FFFFFF' : CA.cardGray;
 
@@ -6028,7 +6076,7 @@ function buildNext6SprintsSlide_(deck, ss) {
     statusCell.getText().getTextStyle().setFontSize(7).setForegroundColor(CA.textMid).setFontFamily(CA.font);
 
     for (var mc = 0; mc < sprintHeaders.length; mc++) {
-      var val = String(data[r][mc + 3] || '').trim();
+      var val = String(data[r][mc + 4] || '').trim();  // Sprints now at index 4+
       var markerCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[mc + 2], y2, colWidths2[mc + 2], rh);
       var mBg = bgColor;
       if (val === '◆') mBg = '#D4EDDA';
@@ -6069,19 +6117,22 @@ function buildFullYearTimelineTableSlide_(deck, ss) {
   var data = fytSheet.getDataRange().getValues();
   if (data.length < 6) { addCalArtsBranding_(slide); return; }
 
-  // Month headers from row 5 (index 4), cols C+ (index 2+)
+  // Check if ANY rows have 📊 Deck checked — if so, filter to only those
+  var anyDeckFlagged = data.slice(6).some(function(row) { return row[1] === true; });
+
+  // Month headers from row 5 (index 4), cols D+ (index 3+, after 📊 Deck col)
   var months = [];
-  for (var c = 2; c < data[4].length && c < 18; c++) {
+  for (var c = 3; c < data[4].length && c < 19; c++) {
     var mStr = String(data[4][c] || '').trim();
     if (mStr) months.push(mStr.replace(/ 20\d\d/, '').substring(0, 3));
   }
 
   // Quarter groupings for colored header bands
-  var qColors = [CA.navy, CA.navy, CA.navy, // Q3/Q4 FY2026 (first 3-4)
-    CA.teal, CA.teal, CA.teal,   // Q1 FY2027
-    CA.coral, CA.coral, CA.coral, // Q2 FY2027
-    CA.orange, CA.orange, CA.orange, // Q3 FY2027
-    CA.purple, CA.purple, CA.purple, CA.purple]; // Q4 FY2027
+  var qColors = [CA.navy, CA.navy, CA.navy,
+    CA.teal, CA.teal, CA.teal,
+    CA.coral, CA.coral, CA.coral,
+    CA.orange, CA.orange, CA.orange,
+    CA.purple, CA.purple, CA.purple, CA.purple];
 
   // Layout
   var catWidth = 130;
@@ -6108,14 +6159,15 @@ function buildFullYearTimelineTableSlide_(deck, ss) {
   });
   y += rh + 2;
 
-  // Data rows
+  // Data rows — new indices: [0]=Category, [1]=📊 Deck, [2]=Status, [3+]=months
   var rowCount = 0;
   for (var r = 6; r < data.length && rowCount < 24; r++) {
     var label = String(data[r][0] || '').trim();
     if (!label) continue;
 
-    var status = String(data[r][1] || '').trim();
-    var hasMarkers = data[r].slice(2).some(function(c2) { return String(c2).trim() !== ''; });
+    var inDeck = data[r][1] === true;  // Col B = 📊 Deck
+    var status = String(data[r][2] || '').trim();  // Col C = Status
+    var hasMarkers = data[r].slice(3).some(function(c2) { return String(c2).trim() !== ''; });
 
     // Section header
     if (!status && !hasMarkers && /^[^\w\s]/.test(label)) {
@@ -6130,6 +6182,9 @@ function buildFullYearTimelineTableSlide_(deck, ss) {
       continue;
     }
 
+    // Filter: if any items are deck-flagged, only show those
+    if (anyDeckFlagged && !inDeck) continue;
+
     // Data row
     var isComplete = status === 'Complete';
     var isBehind = status === 'Behind';
@@ -6143,9 +6198,9 @@ function buildFullYearTimelineTableSlide_(deck, ss) {
     labelCell.getText().getTextStyle().setFontSize(5).setFontFamily(CA.font);
     labelCell.getText().getTextStyle().setForegroundColor(isComplete ? CA.green : isBehind ? CA.coral : CA.textDark);
 
-    // Month markers
+    // Month markers (now start at index 3)
     for (var mc = 0; mc < months.length; mc++) {
-      var val = String(data[r][mc + 2] || '').trim();
+      var val = String(data[r][mc + 3] || '').trim();
       var mCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX + catWidth + mc * monthWidth, y, monthWidth, rh);
 
       var mBg = bgColor;
@@ -6189,6 +6244,9 @@ function buildFullYearTimelineSlide_(deck, ss) {
   var data = fytSheet.getDataRange().getValues();
   if (data.length < 6) { addCalArtsBranding_(slide); return; }
 
+  // Check if ANY rows have 📊 Deck checked
+  var anyDeckFlagged = data.slice(6).some(function(row) { return row[1] === true; });
+
   // Quarter-based layout (like slide 9) — group milestones by quarter
   var quarterGroups = {};
   var quarterOrder = ['Q3 FY2026', 'Q4 FY2026', 'Q1 FY2027', 'Q2 FY2027', 'Q3 FY2027', 'Q4 FY2027'];
@@ -6209,24 +6267,29 @@ function buildFullYearTimelineSlide_(deck, ss) {
     'Apr 2027': 'Q4 FY2027', 'May 2027': 'Q4 FY2027', 'Jun 2027': 'Q4 FY2027'
   };
 
-  // Month headers from row 5 (index 4)
+  // Month headers from row 5 (index 4) — months now start at col D (index 3)
   var monthHeaders = [];
-  for (var c = 2; c < data[4].length; c++) {
+  for (var c = 3; c < data[4].length; c++) {
     var mStr = String(data[4][c] || '').trim();
     if (mStr) monthHeaders.push({ col: c, month: mStr });
   }
 
   // Scan data rows and group milestones by quarter
+  // New indices: [0]=Category, [1]=📊 Deck, [2]=Status, [3+]=months
   for (var r = 6; r < data.length; r++) {
     var label = String(data[r][0] || '').trim();
-    var status = String(data[r][1] || '').trim();
+    var inDeck = data[r][1] === true;  // Col B = 📊 Deck
+    var status = String(data[r][2] || '').trim();  // Col C = Status
     if (!label) continue;
 
-    var hasMarkers = data[r].slice(2).some(function(c2) { return String(c2).trim() !== ''; });
+    var hasMarkers = data[r].slice(3).some(function(c2) { return String(c2).trim() !== ''; });
     if (!hasMarkers) continue; // Skip section headers
 
+    // Filter: if any items are deck-flagged, only show those
+    if (anyDeckFlagged && !inDeck) continue;
+
     // Find which month column has a marker
-    for (var mc2 = 2; mc2 < data[r].length; mc2++) {
+    for (var mc2 = 3; mc2 < data[r].length; mc2++) {
       var val = String(data[r][mc2] || '').trim();
       if (!val) continue;
       var mh = monthHeaders.find(function(m) { return m.col === mc2; });
