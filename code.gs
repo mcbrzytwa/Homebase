@@ -2493,7 +2493,7 @@ function processGranolaNotesForSatellite(satelliteName, granolaText, participant
   }
   
   // Find the check-in config
-  const checkIn = CONFIG.checkIns.find(c => c.name === satellite || c.legacyName === satelliteName || c.legacyName === satelliteName);
+  const checkIn = CONFIG.checkIns.find(c => c.name === satelliteName || c.legacyName === satelliteName);
   if (!checkIn) throw new Error('Satellite "' + satelliteName + '" not found in config.');
   
   // Call Claude to extract structured data from Granola notes
@@ -2640,7 +2640,7 @@ function pushToSingleSatellite_(ss, satelliteName) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] !== satelliteName || !data[i][1]) continue;
     
-    const checkIn = CONFIG.checkIns.find(c => c.name === satellite || c.legacyName === satelliteName || c.legacyName === satelliteName);
+    const checkIn = CONFIG.checkIns.find(c => c.name === satelliteName || c.legacyName === satelliteName);
     if (!checkIn || checkIn.type === 'okr') continue;
     
     try {
