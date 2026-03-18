@@ -5350,13 +5350,13 @@ function generateSprintDeckSlides(payloadJson) {
   // 1. Title Slide
   buildTitleSlide_(deck, sprintInfo);
 
-  // 2. Sprint Intent & OKR Status
+  // 2. Sprint Divider + OKR Velocity
   buildIntentOKRSlide_(deck, ss, sprintInfo);
 
-  // 3. Milestones Achieved
-  buildMilestonesSlide_(deck, payload.achieved || []);
+  // 3. Milestones & OKRs Achieved
+  buildMilestonesSlide_(deck, payload.achieved || [], ss);
 
-  // 4. What's Next
+  // 4. Sprint Priorities (What's Next)
   buildWhatsNextSlide_(deck, payload.whatsNext || '');
 
   // 5. Communications & Risks
@@ -5365,400 +5365,679 @@ function generateSprintDeckSlides(payloadJson) {
   // 6. Action Items by Satellite
   buildActionItemsSlide_(deck, ss);
 
-  // 7. Next 6 Sprints Timeline
+  // 7. Next 6 Sprints Timeline (full table)
   buildNext6SprintsSlide_(deck, ss);
 
-  // 8. Full Year Timeline
+  // 8. Full Year Timeline (detailed table)
+  buildFullYearTimelineTableSlide_(deck, ss);
+
+  // 9. Looking Ahead (quarter summary)
   buildFullYearTimelineSlide_(deck, ss);
 
   return deck.getUrl();
 }
 
 
+// ---- CalArts Design System Constants ----
+var CA = {
+  darkTeal:   '#0D3B54',   // Dark teal background (title/divider slides)
+  teal:       '#4DBCD0',   // Primary brand accent
+  navy:       '#2B3A67',   // Navy accent (card bars, headers)
+  coral:      '#C75B4A',   // Coral/red accent
+  orange:     '#E8873D',   // Orange accent
+  purple:     '#7B5EA7',   // Purple accent
+  green:      '#3D8B6E',   // Green accent
+  cardGray:   '#EFEFEF',   // Card background
+  bgWhite:    '#FFFFFF',   // Content slide background
+  textDark:   '#1A1A1A',   // Primary text
+  textMid:    '#555555',   // Secondary text
+  textLight:  '#999999',   // Tertiary text
+  line:       '#4DBCD0',   // Accent line under titles
+  font:       'Arial',     // CalArts uses clean sans-serif
+};
+
+// Accent colors for card top-bars, cycling through brand palette
+var CA_ACCENTS = [CA.navy, CA.teal, CA.coral, CA.orange, CA.purple, CA.green];
+
+
 // ---- Slide Builder Helpers ----
 
+/**
+ * Adds CalArts branding: teal "CalARTS" bottom-right of every slide.
+ */
+function addCalArtsBranding_(slide) {
+  var brand = slide.insertTextBox('CalARTS', 600, 490, 100, 25);
+  brand.getText().getTextStyle()
+    .setFontSize(14).setBold(true).setForegroundColor(CA.teal).setFontFamily(CA.font);
+  brand.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.END);
+}
+
+
+/**
+ * Adds the standard CalArts content-slide header:
+ * bold dark title + teal accent line underneath.
+ */
+function addSlideHeader_(slide, title) {
+  var titleBox = slide.insertTextBox(title, 50, 28, 620, 45);
+  titleBox.getText().getTextStyle()
+    .setFontSize(26).setBold(true).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+
+  // Teal accent line
+  var line = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 50, 73, 620, 3);
+  line.getFill().setSolidFill(CA.teal);
+  line.getBorder().setTransparent();
+}
+
+
+/**
+ * Creates a section divider slide (dark teal bg, numbered, title, subtitle).
+ */
+function buildDividerSlide_(deck, number, title, subtitle) {
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.darkTeal);
+
+  // Section number in teal
+  if (number) {
+    var numBox = slide.insertTextBox(number, 50, 140, 200, 40);
+    numBox.getText().getTextStyle()
+      .setFontSize(16).setItalic(true).setForegroundColor(CA.teal).setFontFamily(CA.font);
+  }
+
+  // Title
+  var titleBox = slide.insertTextBox(title, 50, 185, 620, 60);
+  titleBox.getText().getTextStyle()
+    .setFontSize(32).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+
+  // Subtitle
+  if (subtitle) {
+    var subBox = slide.insertTextBox(subtitle, 50, 255, 620, 35);
+    subBox.getText().getTextStyle()
+      .setFontSize(13).setItalic(true).setForegroundColor(CA.teal).setFontFamily(CA.font);
+  }
+
+  addCalArtsBranding_(slide);
+  return slide;
+}
+
+
+// ============================================================================
+// SLIDE BUILDERS — CalArts Style
+// ============================================================================
+
 function buildTitleSlide_(deck, sprintInfo) {
-  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.darkTeal);
 
-  // Background
-  slide.getBackground().setSolidFill('#1a1a2e');
+  // Main title
+  var title = slide.insertTextBox('CHANEL Center for\nArtists and Technology', 50, 80, 500, 90);
+  title.getText().getTextStyle()
+    .setFontSize(30).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
 
-  // CCAT title
-  const title = slide.insertTextBox('🏛️ CCAT Sprint Update', 40, 120, 640, 60);
-  title.getText().getTextStyle().setFontSize(32).setForegroundColor('#C9A227').setBold(true).setFontFamily('Google Sans');
+  // Sprint label
+  var sprintLabel = slide.insertTextBox(sprintInfo.name + ' Update', 50, 185, 400, 35);
+  sprintLabel.getText().getTextStyle()
+    .setFontSize(16).setForegroundColor(CA.teal).setFontFamily(CA.font);
 
-  // Sprint name
-  const sprintName = slide.insertTextBox(sprintInfo.name, 40, 200, 640, 50);
-  sprintName.getText().getTextStyle().setFontSize(28).setForegroundColor('#FFFFFF').setBold(true).setFontFamily('Google Sans');
+  // Teal accent line
+  var line = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 50, 225, 300, 3);
+  line.getFill().setSolidFill(CA.teal);
+  line.getBorder().setTransparent();
 
   // Dates
-  const dates = slide.insertTextBox(sprintInfo.dates, 40, 260, 640, 35);
-  dates.getText().getTextStyle().setFontSize(18).setForegroundColor('#9CA3AF').setFontFamily('Google Sans');
+  var dates = slide.insertTextBox(sprintInfo.dates, 50, 240, 400, 30);
+  dates.getText().getTextStyle()
+    .setFontSize(13).setForegroundColor('#AACDD8').setFontFamily(CA.font);
 
   // Intent
   if (sprintInfo.intent) {
-    const intent = slide.insertTextBox('"' + sprintInfo.intent + '"', 40, 320, 640, 60);
-    intent.getText().getTextStyle().setFontSize(14).setForegroundColor('#D4D4D8').setItalic(true).setFontFamily('Google Sans');
+    var intent = slide.insertTextBox('"' + sprintInfo.intent + '"', 50, 280, 500, 50);
+    intent.getText().getTextStyle()
+      .setFontSize(12).setItalic(true).setForegroundColor('#8BBBC9').setFontFamily(CA.font);
   }
 
-  // Date stamp
-  const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy');
-  const stamp = slide.insertTextBox(dateStr, 40, 420, 300, 25);
-  stamp.getText().getTextStyle().setFontSize(11).setForegroundColor('#6B7280').setFontFamily('Google Sans');
+  // Bottom info line
+  var dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM yyyy');
+  var infoLine = slide.insertTextBox('Presentation for CHANEL Arts & Culture  ·  ' + dateStr, 50, 470, 400, 20);
+  infoLine.getText().getTextStyle()
+    .setFontSize(9).setForegroundColor('#7AABB8').setFontFamily(CA.font);
+
+  addCalArtsBranding_(slide);
 }
 
 
 function buildIntentOKRSlide_(deck, ss, sprintInfo) {
-  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  slide.getBackground().setSolidFill('#FFFFFF');
+  // Section divider first
+  var sprintNum = String(sprintInfo.name || '').replace(/[^0-9]/g, '') || '1';
+  buildDividerSlide_(deck, '', 'Sprint ' + sprintNum + ' — In Motion',
+    sprintInfo.dates + '  ·  ' + (sprintInfo.intent || ''));
 
-  // Header
-  addSlideHeader_(slide, 'Sprint Intent & OKR Status');
+  // OKR Velocity slide
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.bgWhite);
+  addSlideHeader_(slide, 'OKR Velocity');
 
-  // Intent box
-  const intentBox = slide.insertTextBox('Sprint Intent: ' + (sprintInfo.intent || 'Not set'), 40, 80, 640, 40);
-  intentBox.getText().getTextStyle().setFontSize(14).setForegroundColor('#1a1a2e').setItalic(true).setFontFamily('Google Sans');
+  // Sprint subtitle
+  var sub = slide.insertTextBox(sprintInfo.name + ' Key Results Completed', 50, 85, 400, 20);
+  sub.getText().getTextStyle()
+    .setFontSize(10).setItalic(true).setForegroundColor(CA.teal).setFontFamily(CA.font);
 
   // OKR Status
-  const okrSheet = ss.getSheetByName(CONFIG.sheets.okrs);
-  const counts = { 'Complete': 0, 'In Progress': 0, 'Not Started': 0, 'Blocked': 0 };
+  var okrSheet = ss.getSheetByName(CONFIG.sheets.okrs);
+  var okrRows = [];
 
   if (okrSheet) {
-    const data = okrSheet.getDataRange().getValues();
-    const cols = CONFIG.okrColumns;
-    for (let i = 3; i < data.length; i++) {
-      const status = data[i][cols.status - 1];
-      if (status && counts.hasOwnProperty(status)) counts[status]++;
+    var data = okrSheet.getDataRange().getValues();
+    var cols = CONFIG.okrColumns;
+    for (var i = 3; i < data.length; i++) {
+      var kr = String(data[i][cols.keyResult - 1] || '').trim();
+      var status = String(data[i][cols.status - 1] || '').trim();
+      var priority = String(data[i][cols.priority - 1] || '').trim();
+      if (kr) {
+        okrRows.push({ kr: kr, status: status, priority: priority });
+      }
     }
   }
 
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
-
-  // Status boxes (2x2 grid)
-  const statItems = [
-    { label: '✅ Complete', val: counts['Complete'], color: '#C8E6C9', x: 40 },
-    { label: '🔄 In Progress', val: counts['In Progress'], color: '#BBDEFB', x: 200 },
-    { label: '⏸️ Not Started', val: counts['Not Started'], color: '#F5F5F5', x: 360 },
-    { label: '🚫 Blocked', val: counts['Blocked'], color: '#FFCDD2', x: 520 }
-  ];
-
-  statItems.forEach(item => {
-    const box = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, item.x, 140, 145, 90);
-    box.getFill().setSolidFill(item.color);
-    box.getBorder().getLineFill().setSolidFill('#CCCCCC');
-    box.getBorder().setWeight(1);
-    const text = box.getText();
-    text.setText(item.val + '\n' + item.label);
-    const style = text.getTextStyle();
-    style.setFontSize(11).setFontFamily('Google Sans');
-    text.getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
-    // Make the number large
-    text.getRange(0, String(item.val).length).getTextStyle().setFontSize(28).setBold(true);
-  });
-
-  // Progress bar
-  if (total > 0) {
-    const pctComplete = counts['Complete'] / total;
-    const barWidth = 640;
-    const barY = 260;
-
-    // Background bar
-    const bgBar = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 40, barY, barWidth, 16);
-    bgBar.getFill().setSolidFill('#E0E0E0');
-    bgBar.getBorder().setTransparent();
-
-    // Progress fill
-    if (pctComplete > 0) {
-      const fillWidth = Math.max(16, barWidth * pctComplete);
-      const fillBar = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 40, barY, fillWidth, 16);
-      fillBar.getFill().setSolidFill('#4CAF50');
-      fillBar.getBorder().setTransparent();
-    }
-
-    const pctText = slide.insertTextBox(Math.round(pctComplete * 100) + '% of OKRs Complete (' + total + ' total)', 40, barY + 20, barWidth, 20);
-    pctText.getText().getTextStyle().setFontSize(10).setForegroundColor('#666').setFontFamily('Google Sans');
-  }
-}
-
-
-function buildMilestonesSlide_(deck, achieved) {
-  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  slide.getBackground().setSolidFill('#FFFFFF');
-
-  addSlideHeader_(slide, 'Milestones Achieved');
-
-  if (achieved.length === 0) {
-    const noItems = slide.insertTextBox('No milestones marked as achieved this sprint.', 40, 100, 640, 30);
-    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setItalic(true).setFontFamily('Google Sans');
+  if (okrRows.length === 0) {
+    var noOkrs = slide.insertTextBox('No OKRs configured yet.', 50, 120, 620, 30);
+    noOkrs.getText().getTextStyle().setFontSize(14).setForegroundColor(CA.textLight).setItalic(true).setFontFamily(CA.font);
+    addCalArtsBranding_(slide);
     return;
   }
 
-  // Build milestone list — split into two columns if many items
-  const maxPerSlide = 12;
-  const items = achieved.slice(0, maxPerSlide);
-  const midpoint = Math.ceil(items.length / 2);
+  // Display OKRs in a grid with status badges (like the screenshot)
+  var yPos = 115;
+  var colWidth = 310;
+  var rowH = 55;
+  var maxRows = 8;
 
-  const col1Items = items.slice(0, midpoint);
-  const col2Items = items.slice(midpoint);
+  okrRows.slice(0, maxRows).forEach(function(okr, idx) {
+    var col = idx % 2;
+    var row = Math.floor(idx / 2);
+    var x = 50 + col * (colWidth + 15);
+    var y = yPos + row * (rowH + 8);
 
-  const col1Text = col1Items.map(m => '✅  ' + m).join('\n\n');
-  const col2Text = col2Items.map(m => '✅  ' + m).join('\n\n');
+    // Card background
+    var card = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, x, y, colWidth, rowH);
+    card.getFill().setSolidFill(CA.cardGray);
+    card.getBorder().setTransparent();
 
-  const col1 = slide.insertTextBox(col1Text, 40, 90, 320, 340);
-  col1.getText().getTextStyle().setFontSize(11).setForegroundColor('#1a1a2e').setFontFamily('Google Sans');
+    // Status badge
+    var badgeColor, badgeText;
+    var sl = okr.status.toLowerCase();
+    if (sl === 'complete' || sl === 'done') {
+      badgeColor = CA.teal; badgeText = 'COMPLETE';
+    } else if (sl === 'in progress') {
+      badgeColor = CA.navy; badgeText = 'IN PROGRESS';
+    } else if (sl === 'blocked') {
+      badgeColor = CA.coral; badgeText = 'BLOCKED';
+    } else {
+      badgeColor = CA.textLight; badgeText = 'NOT STARTED';
+    }
 
-  if (col2Text) {
-    const col2 = slide.insertTextBox(col2Text, 370, 90, 320, 340);
-    col2.getText().getTextStyle().setFontSize(11).setForegroundColor('#1a1a2e').setFontFamily('Google Sans');
+    // Priority badge
+    var priBadge = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, x + 5, y + 5, 28, 16);
+    priBadge.getFill().setSolidFill(CA.navy);
+    priBadge.getBorder().setTransparent();
+    priBadge.getText().setText(okr.priority || 'P2');
+    priBadge.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+    priBadge.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+
+    // Status badge
+    var statusBadge = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, x + 38, y + 5, 65, 16);
+    statusBadge.getFill().setSolidFill(badgeColor);
+    statusBadge.getBorder().setTransparent();
+    statusBadge.getText().setText(badgeText);
+    statusBadge.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+    statusBadge.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+
+    // KR text
+    var krText = slide.insertTextBox(okr.kr.substring(0, 80), x + 5, y + 24, colWidth - 10, 28);
+    krText.getText().getTextStyle().setFontSize(8).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+  });
+
+  // Summary line at bottom
+  var complete = okrRows.filter(function(o) { return o.status.toLowerCase() === 'complete' || o.status.toLowerCase() === 'done'; }).length;
+  var inProg = okrRows.filter(function(o) { return o.status.toLowerCase() === 'in progress'; }).length;
+  var blocked = okrRows.filter(function(o) { return o.status.toLowerCase() === 'blocked'; }).length;
+  var summaryText = 'Key Results: ' + okrRows.length + ' Total  ·  Completed: ' + complete +
+    '  ·  In Progress: ' + inProg + '  ·  Blocked: ' + blocked;
+  var summaryBox = slide.insertTextBox(summaryText, 50, 470, 500, 18);
+  summaryBox.getText().getTextStyle().setFontSize(8).setForegroundColor(CA.textMid).setFontFamily(CA.font);
+
+  addCalArtsBranding_(slide);
+}
+
+
+function buildMilestonesSlide_(deck, achieved, ss) {
+  // Gather completed OKRs
+  var completedOKRs = [];
+  if (ss) {
+    var okrSheet = ss.getSheetByName(CONFIG.sheets.okrs);
+    if (okrSheet) {
+      var okrData = okrSheet.getDataRange().getValues();
+      var cols = CONFIG.okrColumns;
+      for (var i = 3; i < okrData.length; i++) {
+        var kr = String(okrData[i][cols.keyResult - 1] || '').trim();
+        var st = String(okrData[i][cols.status - 1] || '').toLowerCase();
+        if (kr && (st === 'complete' || st === 'done')) {
+          completedOKRs.push(kr);
+        }
+      }
+    }
   }
+
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.bgWhite);
+  addSlideHeader_(slide, 'Milestones & OKRs Achieved');
+
+  var hasAchieved = achieved.length > 0;
+  var hasOKRs = completedOKRs.length > 0;
+
+  if (!hasAchieved && !hasOKRs) {
+    var noItems = slide.insertTextBox('No milestones or OKRs marked as achieved this sprint.', 50, 110, 620, 30);
+    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor(CA.textLight).setItalic(true).setFontFamily(CA.font);
+    addCalArtsBranding_(slide);
+    return;
+  }
+
+  // Left column: Milestones achieved (cards)
+  var leftWidth = hasOKRs ? 340 : 620;
+  var rightX = 400;
+
+  if (hasAchieved) {
+    var msLabel = slide.insertTextBox('Sprint Milestones', 50, 88, leftWidth, 22);
+    msLabel.getText().getTextStyle().setFontSize(12).setBold(true).setForegroundColor(CA.navy).setFontFamily(CA.font);
+
+    var maxCards = hasOKRs ? 5 : 6;
+    var items = achieved.slice(0, maxCards);
+    var cardW = hasOKRs ? 300 : Math.min(200, (620 / Math.min(items.length, 3)) - 10);
+    var cardH = hasOKRs ? 52 : (items.length <= 3 ? 260 : 130);
+
+    if (hasOKRs) {
+      // Compact list layout for left column when OKRs present
+      items.forEach(function(milestone, idx) {
+        var y = 115 + idx * (cardH + 6);
+
+        var card = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 50, y, cardW, cardH);
+        card.getFill().setSolidFill(CA.cardGray);
+        card.getBorder().setTransparent();
+
+        var accent = CA_ACCENTS[idx % CA_ACCENTS.length];
+        var bar = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 50, y, 4, cardH);
+        bar.getFill().setSolidFill(accent);
+        bar.getBorder().setTransparent();
+
+        var checkBox = slide.insertTextBox('✅', 60, y + 5, 20, 18);
+        checkBox.getText().getTextStyle().setFontSize(10).setFontFamily(CA.font);
+
+        var textBox = slide.insertTextBox(milestone, 82, y + 5, cardW - 40, cardH - 10);
+        textBox.getText().getTextStyle().setFontSize(9).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+      });
+
+      if (achieved.length > maxCards) {
+        var moreBox = slide.insertTextBox('+ ' + (achieved.length - maxCards) + ' more', 50, 115 + maxCards * 58, 200, 18);
+        moreBox.getText().getTextStyle().setFontSize(9).setItalic(true).setForegroundColor(CA.textMid).setFontFamily(CA.font);
+      }
+    } else {
+      // Card grid layout when no OKRs
+      var perRow = Math.min(items.length, 3);
+      items.forEach(function(milestone, idx) {
+        var col = idx % perRow;
+        var row = Math.floor(idx / perRow);
+        var x = 50 + col * (cardW + 10);
+        var y = 115 + row * (cardH + 10);
+
+        var card = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, x, y, cardW, cardH);
+        card.getFill().setSolidFill(CA.cardGray);
+        card.getBorder().setTransparent();
+
+        var accent = CA_ACCENTS[idx % CA_ACCENTS.length];
+        var topBar = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, x, y, cardW, 4);
+        topBar.getFill().setSolidFill(accent);
+        topBar.getBorder().setTransparent();
+
+        var checkBox = slide.insertTextBox('✅', x + 8, y + 12, 25, 20);
+        checkBox.getText().getTextStyle().setFontSize(12).setFontFamily(CA.font);
+
+        var textBox = slide.insertTextBox(milestone, x + 8, y + 35, cardW - 16, cardH - 45);
+        textBox.getText().getTextStyle().setFontSize(9).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+      });
+    }
+  }
+
+  // Right column: Completed OKRs
+  if (hasOKRs) {
+    var okrLabel = slide.insertTextBox('OKRs Completed', rightX, 88, 280, 22);
+    okrLabel.getText().getTextStyle().setFontSize(12).setBold(true).setForegroundColor(CA.teal).setFontFamily(CA.font);
+
+    completedOKRs.slice(0, 6).forEach(function(okr, idx) {
+      var y = 115 + idx * 52;
+
+      var card = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, rightX, y, 280, 46);
+      card.getFill().setSolidFill(CA.cardGray);
+      card.getBorder().setTransparent();
+
+      var sideBar = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, rightX, y, 4, 46);
+      sideBar.getFill().setSolidFill(CA.teal);
+      sideBar.getBorder().setTransparent();
+
+      var badge = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, rightX + 10, y + 5, 65, 14);
+      badge.getFill().setSolidFill(CA.teal);
+      badge.getBorder().setTransparent();
+      badge.getText().setText('COMPLETE');
+      badge.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+      badge.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+
+      var okrText = slide.insertTextBox(okr.substring(0, 70), rightX + 10, y + 22, 260, 20);
+      okrText.getText().getTextStyle().setFontSize(8).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+    });
+
+    if (completedOKRs.length > 6) {
+      var moreOKR = slide.insertTextBox('+ ' + (completedOKRs.length - 6) + ' more OKRs completed', rightX, 115 + 6 * 52, 280, 18);
+      moreOKR.getText().getTextStyle().setFontSize(9).setItalic(true).setForegroundColor(CA.textMid).setFontFamily(CA.font);
+    }
+  }
+
+  addCalArtsBranding_(slide);
 }
 
 
 function buildWhatsNextSlide_(deck, whatsNext) {
-  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  slide.getBackground().setSolidFill('#FFFFFF');
-
-  addSlideHeader_(slide, "What's Next");
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.bgWhite);
+  addSlideHeader_(slide, 'Sprint Priorities');
 
   if (!whatsNext.trim()) {
-    const noItems = slide.insertTextBox('No priorities specified.', 40, 100, 640, 30);
-    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setItalic(true).setFontFamily('Google Sans');
+    var noItems = slide.insertTextBox('No priorities specified.', 50, 110, 620, 30);
+    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor(CA.textLight).setItalic(true).setFontFamily(CA.font);
+    addCalArtsBranding_(slide);
     return;
   }
 
-  // Parse bullet points — add bullet markers if not present
-  const lines = whatsNext.split('\n').filter(l => l.trim());
-  const formatted = lines.map(line => {
-    line = line.trim();
-    if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
-      return '→  ' + line.replace(/^[-•*]\s*/, '');
-    }
-    return '→  ' + line;
-  }).join('\n\n');
+  // Two-column layout with teal bullet squares (like slide 8)
+  var lines = whatsNext.split('\n').filter(function(l) { return l.trim(); });
+  var midpoint = Math.ceil(lines.length / 2);
+  var col1Lines = lines.slice(0, midpoint);
+  var col2Lines = lines.slice(midpoint);
 
-  const body = slide.insertTextBox(formatted, 40, 90, 640, 350);
-  body.getText().getTextStyle().setFontSize(13).setForegroundColor('#1a1a2e').setFontFamily('Google Sans');
+  // Column headers
+  var leftHeader = slide.insertTextBox('Key Priorities', 50, 90, 280, 22);
+  leftHeader.getText().getTextStyle().setFontSize(12).setBold(true).setForegroundColor(CA.navy).setFontFamily(CA.font);
+
+  if (col2Lines.length > 0) {
+    var rightHeader = slide.insertTextBox('Additional Focus', 380, 90, 280, 22);
+    rightHeader.getText().getTextStyle().setFontSize(12).setBold(true).setForegroundColor(CA.navy).setFontFamily(CA.font);
+  }
+
+  // Render bullet items with teal squares
+  function renderBulletList(items, startX, startY) {
+    items.forEach(function(item, i) {
+      item = item.trim().replace(/^[-•*]\s*/, '');
+      var y = startY + i * 36;
+
+      // Teal bullet square
+      var bullet = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y + 3, 10, 10);
+      bullet.getFill().setSolidFill(CA.teal);
+      bullet.getBorder().setTransparent();
+
+      // Text
+      var text = slide.insertTextBox(item, startX + 18, y, 280, 32);
+      text.getText().getTextStyle().setFontSize(10).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+    });
+  }
+
+  renderBulletList(col1Lines, 50, 118);
+  if (col2Lines.length > 0) {
+    renderBulletList(col2Lines, 380, 118);
+  }
+
+  addCalArtsBranding_(slide);
 }
 
 
 function buildCommunicationsSlide_(deck, communications, risks) {
-  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  slide.getBackground().setSolidFill('#FFFFFF');
-
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.bgWhite);
   addSlideHeader_(slide, 'Communications & Risks');
 
-  let yPos = 85;
+  var yPos = 95;
 
   // Communications section
   if (communications.trim()) {
-    const commHeader = slide.insertTextBox('📣 Communications', 40, yPos, 640, 25);
-    commHeader.getText().getTextStyle().setFontSize(14).setBold(true).setForegroundColor('#1a73e8').setFontFamily('Google Sans');
-    yPos += 30;
+    var commLabel = slide.insertTextBox('Communications', 50, yPos, 300, 22);
+    commLabel.getText().getTextStyle().setFontSize(13).setBold(true).setForegroundColor(CA.navy).setFontFamily(CA.font);
+    yPos += 28;
 
-    const lines = communications.split('\n').filter(l => l.trim());
-    const formatted = lines.map(l => {
-      l = l.trim();
-      return (l.startsWith('-') || l.startsWith('•')) ? '•  ' + l.replace(/^[-•]\s*/, '') : '•  ' + l;
-    }).join('\n');
+    var commLines = communications.split('\n').filter(function(l) { return l.trim(); });
+    commLines.forEach(function(line, i) {
+      line = line.trim().replace(/^[-•]\s*/, '');
 
-    const commBody = slide.insertTextBox(formatted, 40, yPos, 640, Math.min(lines.length * 22, 160));
-    commBody.getText().getTextStyle().setFontSize(12).setForegroundColor('#333').setFontFamily('Google Sans');
-    yPos += Math.min(lines.length * 22, 160) + 15;
+      var bullet = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 50, yPos + 3, 8, 8);
+      bullet.getFill().setSolidFill(CA.teal);
+      bullet.getBorder().setTransparent();
+
+      var text = slide.insertTextBox(line, 66, yPos, 600, 20);
+      text.getText().getTextStyle().setFontSize(10).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+      yPos += 24;
+    });
+    yPos += 12;
   }
 
   // Risks section
   if (risks.trim()) {
-    const riskHeader = slide.insertTextBox('⚠️ Risks & Blockers', 40, yPos, 640, 25);
-    riskHeader.getText().getTextStyle().setFontSize(14).setBold(true).setForegroundColor('#B71C1C').setFontFamily('Google Sans');
-    yPos += 30;
+    var riskLabel = slide.insertTextBox('Risks & Blockers', 50, yPos, 300, 22);
+    riskLabel.getText().getTextStyle().setFontSize(13).setBold(true).setForegroundColor(CA.coral).setFontFamily(CA.font);
+    yPos += 28;
 
-    const lines = risks.split('\n').filter(l => l.trim());
-    const formatted = lines.map(l => {
-      l = l.trim();
-      return (l.startsWith('-') || l.startsWith('•')) ? '🔴  ' + l.replace(/^[-•]\s*/, '') : '🔴  ' + l;
-    }).join('\n');
+    var riskLines = risks.split('\n').filter(function(l) { return l.trim(); });
+    riskLines.forEach(function(line) {
+      line = line.trim().replace(/^[-•]\s*/, '');
 
-    const riskBody = slide.insertTextBox(formatted, 40, yPos, 640, Math.min(lines.length * 22, 160));
-    riskBody.getText().getTextStyle().setFontSize(12).setForegroundColor('#333').setFontFamily('Google Sans');
+      var bullet = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 50, yPos + 3, 8, 8);
+      bullet.getFill().setSolidFill(CA.coral);
+      bullet.getBorder().setTransparent();
+
+      var text = slide.insertTextBox(line, 66, yPos, 600, 20);
+      text.getText().getTextStyle().setFontSize(10).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+      yPos += 24;
+    });
+  }
+
+  // Status badges at bottom (like the ON TRACK / ON BUDGET badges in slide 4)
+  if (risks.trim()) {
+    var riskLines2 = risks.split('\n').filter(function(l) { return l.trim(); });
+    if (riskLines2.length > 0) {
+      var badge = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 50, 455, 100, 22);
+      badge.getFill().setSolidFill(CA.coral);
+      badge.getBorder().setTransparent();
+      badge.getText().setText(riskLines2.length + ' RISK' + (riskLines2.length > 1 ? 'S' : ''));
+      badge.getText().getTextStyle().setFontSize(8).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+      badge.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+    }
   }
 
   if (!communications.trim() && !risks.trim()) {
-    const noItems = slide.insertTextBox('No communications or risks noted.', 40, 100, 640, 30);
-    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setItalic(true).setFontFamily('Google Sans');
+    var noItems = slide.insertTextBox('No communications or risks noted.', 50, 110, 620, 30);
+    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor(CA.textLight).setItalic(true).setFontFamily(CA.font);
   }
+
+  addCalArtsBranding_(slide);
 }
 
 
 function buildActionItemsSlide_(deck, ss) {
-  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  slide.getBackground().setSolidFill('#FFFFFF');
-
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.bgWhite);
   addSlideHeader_(slide, 'Action Items by Satellite');
 
-  const summary = gatherActionSummary_(ss);
+  var summary = gatherActionSummary_(ss);
 
   if (summary.length === 0) {
-    const noItems = slide.insertTextBox('No action items tracked.', 40, 100, 640, 30);
-    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setItalic(true).setFontFamily('Google Sans');
+    var noItems = slide.insertTextBox('No action items tracked.', 50, 110, 620, 30);
+    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor(CA.textLight).setItalic(true).setFontFamily(CA.font);
+    addCalArtsBranding_(slide);
     return;
   }
 
-  // Table header
-  const headers = ['Satellite', 'Owner', 'Total', 'Done', 'Active', 'Blocked'];
-  const colWidths = [130, 110, 70, 70, 70, 70];
-  const colXs = [];
-  let xPos = 55;
-  colWidths.forEach(w => { colXs.push(xPos); xPos += w; });
+  // Table
+  var headers = ['Satellite', 'Owner', 'Total', 'Done', 'Active', 'Blocked'];
+  var colWidths = [140, 120, 65, 65, 65, 65];
+  var colXs = [];
+  var xPos = 50;
+  colWidths.forEach(function(w) { colXs.push(xPos); xPos += w; });
 
-  let yPos = 90;
-  const rowHeight = 28;
+  var yPos = 100;
+  var rowHeight = 30;
 
   // Header row
-  headers.forEach((h, i) => {
-    const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
-    cell.getFill().setSolidFill('#1a73e8');
-    cell.getBorder().getLineFill().setSolidFill('#1557b0');
-    cell.getBorder().setWeight(1);
+  headers.forEach(function(h, i) {
+    var cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
+    cell.getFill().setSolidFill(CA.navy);
+    cell.getBorder().setTransparent();
     cell.getText().setText(h);
-    cell.getText().getTextStyle().setFontSize(10).setBold(true).setForegroundColor('#FFFFFF').setFontFamily('Google Sans');
+    cell.getText().getTextStyle().setFontSize(10).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
     cell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
   });
-
   yPos += rowHeight;
 
   // Data rows
-  summary.forEach((s, rowIdx) => {
-    const bgColor = rowIdx % 2 === 0 ? '#FFFFFF' : '#F8F9FA';
-    const vals = [s.name, s.owner, String(s.total), String(s.complete), String(s.inProgress), String(s.blocked)];
-    vals.forEach((v, i) => {
-      const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
+  summary.forEach(function(s, rowIdx) {
+    var bgColor = rowIdx % 2 === 0 ? '#FFFFFF' : CA.cardGray;
+    var vals = [s.name, s.owner, String(s.total), String(s.complete), String(s.inProgress), String(s.blocked)];
+    vals.forEach(function(v, i) {
+      var cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
       cell.getFill().setSolidFill(bgColor);
       cell.getBorder().getLineFill().setSolidFill('#E0E0E0');
-      cell.getBorder().setWeight(1);
+      cell.getBorder().setWeight(0.5);
       cell.getText().setText(v);
-      cell.getText().getTextStyle().setFontSize(10).setForegroundColor('#333').setFontFamily('Google Sans');
+      cell.getText().getTextStyle().setFontSize(10).setForegroundColor(CA.textDark).setFontFamily(CA.font);
       cell.getText().getParagraphStyle().setParagraphAlignment(i >= 2 ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.START);
 
-      // Highlight blocked
       if (i === 5 && parseInt(v) > 0) {
-        cell.getFill().setSolidFill('#FFCDD2');
-        cell.getText().getTextStyle().setBold(true).setForegroundColor('#B71C1C');
+        cell.getFill().setSolidFill('#FFEBEE');
+        cell.getText().getTextStyle().setBold(true).setForegroundColor(CA.coral);
+      }
+      if (i === 3 && parseInt(v) > 0) {
+        cell.getText().getTextStyle().setForegroundColor(CA.green);
       }
     });
     yPos += rowHeight;
   });
 
   // Totals row
-  const totals = summary.reduce((acc, s) => {
+  var totals = summary.reduce(function(acc, s) {
     acc.total += s.total; acc.complete += s.complete; acc.inProgress += s.inProgress; acc.blocked += s.blocked;
     return acc;
   }, { total: 0, complete: 0, inProgress: 0, blocked: 0 });
 
-  const totalVals = ['TOTAL', '', String(totals.total), String(totals.complete), String(totals.inProgress), String(totals.blocked)];
-  totalVals.forEach((v, i) => {
-    const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
-    cell.getFill().setSolidFill('#E8EAF6');
-    cell.getBorder().getLineFill().setSolidFill('#C5CAE9');
-    cell.getBorder().setWeight(1);
+  var totalVals = ['TOTAL', '', String(totals.total), String(totals.complete), String(totals.inProgress), String(totals.blocked)];
+  totalVals.forEach(function(v, i) {
+    var cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
+    cell.getFill().setSolidFill(CA.darkTeal);
+    cell.getBorder().setTransparent();
     cell.getText().setText(v);
-    cell.getText().getTextStyle().setFontSize(10).setBold(true).setForegroundColor('#1a1a2e').setFontFamily('Google Sans');
+    cell.getText().getTextStyle().setFontSize(10).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
     cell.getText().getParagraphStyle().setParagraphAlignment(i >= 2 ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.START);
   });
+
+  addCalArtsBranding_(slide);
 }
 
 
 function buildNext6SprintsSlide_(deck, ss) {
-  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  slide.getBackground().setSolidFill('#FFFFFF');
-
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.bgWhite);
   addSlideHeader_(slide, 'Next 6 Sprints — Planning View');
 
-  const n6Sheet = ss.getSheetByName(CONFIG.sheets.next6Sprints);
+  var n6Sheet = ss.getSheetByName(CONFIG.sheets.next6Sprints);
   if (!n6Sheet) {
-    const noData = slide.insertTextBox('Next 6 Sprints sheet not created yet.\nRun Setup → Setup Timelines.', 40, 100, 640, 50);
-    noData.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setFontFamily('Google Sans');
+    var noData = slide.insertTextBox('Next 6 Sprints sheet not created yet.\nRun Setup → Setup Timelines.', 50, 110, 620, 50);
+    noData.getText().getTextStyle().setFontSize(14).setForegroundColor(CA.textLight).setFontFamily(CA.font);
+    addCalArtsBranding_(slide);
     return;
   }
 
-  const data = n6Sheet.getDataRange().getValues();
-  if (data.length < 4) return;
+  var data = n6Sheet.getDataRange().getValues();
+  if (data.length < 4) { addCalArtsBranding_(slide); return; }
 
   // Sprint column headers (row 3, cols D-I = index 3-8)
-  const sprintHeaders = [];
-  for (let c = 3; c <= 8 && c < data[2].length; c++) {
+  var sprintHeaders = [];
+  for (var c = 3; c <= 8 && c < data[2].length; c++) {
     sprintHeaders.push(String(data[2][c] || '').replace(/\n/g, ' '));
   }
 
-  // Compact: show sprint headers + rows with markers
-  const colWidths2 = [200, 70];
-  sprintHeaders.forEach(() => colWidths2.push(65));
+  var colWidths2 = [190, 65];
+  sprintHeaders.forEach(function() { colWidths2.push(62); });
 
-  const colXs2 = [];
-  let x2 = 20;
-  colWidths2.forEach(w => { colXs2.push(x2); x2 += w; });
+  var colXs2 = [];
+  var x2 = 30;
+  colWidths2.forEach(function(w) { colXs2.push(x2); x2 += w; });
 
-  let y2 = 85;
-  const rh = 20;
+  var y2 = 90;
+  var rh = 19;
 
-  // Header row
-  const hdrVals = ['Task / Milestone', 'Status'].concat(sprintHeaders.map(h => h.replace(/Sprint \d+ /, 'S')));
-  hdrVals.forEach((h, i) => {
-    const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[i], y2, colWidths2[i], rh);
-    cell.getFill().setSolidFill('#333333');
+  // Header row with sprint colors
+  var hdrVals = ['Task / Milestone', 'Status'].concat(sprintHeaders.map(function(h, i) {
+    return h.replace(/Sprint \d+ /, 'S');
+  }));
+  hdrVals.forEach(function(h, i) {
+    var hdrColor = i >= 2 ? CA_ACCENTS[(i - 2) % CA_ACCENTS.length] : CA.darkTeal;
+    var cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[i], y2, colWidths2[i], rh);
+    cell.getFill().setSolidFill(hdrColor);
     cell.getBorder().setTransparent();
     cell.getText().setText(h);
-    cell.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#FFFFFF').setFontFamily('Google Sans');
+    cell.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+    cell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
   });
   y2 += rh;
 
-  // Data rows (skip header rows, limit to fit on slide)
-  let rowCount = 0;
-  for (let r = 3; r < data.length && rowCount < 18; r++) {
-    const task = String(data[r][0] || '').trim();
+  // Data rows
+  var rowCount = 0;
+  for (var r = 3; r < data.length && rowCount < 18; r++) {
+    var task = String(data[r][0] || '').trim();
     if (!task) continue;
 
-    // Skip section header rows (they have content only in col A)
-    const hasMarkers = data[r].slice(3, 9).some(c => String(c).trim() !== '');
-    const statusVal = String(data[r][2] || '').trim();
+    var hasMarkers = data[r].slice(3, 9).some(function(c2) { return String(c2).trim() !== ''; });
+    var statusVal = String(data[r][2] || '').trim();
 
     if (!hasMarkers && !statusVal) {
-      // Section header
-      const headerCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[0], y2, x2 - colXs2[0], rh);
-      headerCell.getFill().setSolidFill('#E8EAF6');
+      // Section header row
+      var headerCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[0], y2, x2 - colXs2[0], rh);
+      headerCell.getFill().setSolidFill(CA.darkTeal);
       headerCell.getBorder().setTransparent();
       headerCell.getText().setText(task);
-      headerCell.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#333').setFontFamily('Google Sans');
+      headerCell.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
       y2 += rh;
       rowCount++;
       continue;
     }
 
-    const bgColor = rowCount % 2 === 0 ? '#FFFFFF' : '#FAFAFA';
+    var bgColor = rowCount % 2 === 0 ? '#FFFFFF' : CA.cardGray;
 
-    // Task name
-    const taskCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[0], y2, colWidths2[0], rh);
+    var taskCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[0], y2, colWidths2[0], rh);
     taskCell.getFill().setSolidFill(bgColor);
     taskCell.getBorder().setTransparent();
     taskCell.getText().setText(task.substring(0, 40));
-    taskCell.getText().getTextStyle().setFontSize(7).setForegroundColor('#333').setFontFamily('Google Sans');
+    taskCell.getText().getTextStyle().setFontSize(7).setForegroundColor(CA.textDark).setFontFamily(CA.font);
 
-    // Status
-    const statusCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[1], y2, colWidths2[1], rh);
+    var statusCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[1], y2, colWidths2[1], rh);
     statusCell.getFill().setSolidFill(bgColor);
     statusCell.getBorder().setTransparent();
     statusCell.getText().setText(statusVal);
-    statusCell.getText().getTextStyle().setFontSize(7).setForegroundColor('#333').setFontFamily('Google Sans');
+    statusCell.getText().getTextStyle().setFontSize(7).setForegroundColor(CA.textMid).setFontFamily(CA.font);
 
-    // Sprint markers
-    for (let c = 0; c < sprintHeaders.length; c++) {
-      const val = String(data[r][c + 3] || '').trim();
-      const markerCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[c + 2], y2, colWidths2[c + 2], rh);
-      const mBg = val === '◆' ? '#C8E6C9' : val === '⏳' ? '#F3E5F5' : bgColor;
+    for (var mc = 0; mc < sprintHeaders.length; mc++) {
+      var val = String(data[r][mc + 3] || '').trim();
+      var markerCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[mc + 2], y2, colWidths2[mc + 2], rh);
+      var mBg = bgColor;
+      if (val === '◆') mBg = '#D4EDDA';
+      else if (val === '⏳') mBg = '#E8D5F0';
       markerCell.getFill().setSolidFill(mBg);
       markerCell.getBorder().setTransparent();
       if (val) {
         markerCell.getText().setText(val);
-        markerCell.getText().getTextStyle().setFontSize(8).setForegroundColor('#333').setFontFamily('Google Sans');
+        markerCell.getText().getTextStyle().setFontSize(8).setForegroundColor(CA.textDark).setFontFamily(CA.font);
         markerCell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
       }
     }
@@ -5766,131 +6045,245 @@ function buildNext6SprintsSlide_(deck, ss) {
     y2 += rh;
     rowCount++;
   }
-}
 
-
-function buildFullYearTimelineSlide_(deck, ss) {
-  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-  slide.getBackground().setSolidFill('#FFFFFF');
-
-  addSlideHeader_(slide, 'Full Year Timeline (FY2027)');
-
-  const fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
-  if (!fytSheet) {
-    const noData = slide.insertTextBox('Full Year Timeline not created.\nRun Setup → Setup Timelines.', 40, 100, 640, 50);
-    noData.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setFontFamily('Google Sans');
-    return;
-  }
-
-  const data = fytSheet.getDataRange().getValues();
-  if (data.length < 6) return;
-
-  // Month headers: row 5 (index 4), cols C+ (index 2+)
-  const months = [];
-  for (let c = 2; c < data[4].length && c < 18; c++) {
-    const mStr = String(data[4][c] || '').trim();
-    if (mStr) months.push(mStr.replace(/ 20\d\d/, '').substring(0, 3));
-  }
-
-  // Layout: Category column + month columns
-  const catWidth = 140;
-  const statusWidth = 0; // Skip status column on slide
-  const monthWidth = Math.min(35, (680 - catWidth) / months.length);
-  const startX = 15;
-  let y3 = 80;
-  const rh3 = 16;
-
-  // Month header row
-  const monthHeaderCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y3, catWidth, rh3);
-  monthHeaderCell.getFill().setSolidFill('#E8EAED');
-  monthHeaderCell.getBorder().setTransparent();
-  monthHeaderCell.getText().setText('Category');
-  monthHeaderCell.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#333').setFontFamily('Google Sans');
-
-  months.forEach((m, i) => {
-    const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX + catWidth + i * monthWidth, y3, monthWidth, rh3);
-    cell.getFill().setSolidFill('#E8EAED');
-    cell.getBorder().setTransparent();
-    cell.getText().setText(m);
-    cell.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#333').setFontFamily('Google Sans');
-    cell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
-  });
-  y3 += rh3;
-
-  // Data rows (start at row 7 = index 6)
-  let rowCount3 = 0;
-  for (let r = 6; r < data.length && rowCount3 < 24; r++) {
-    const label = String(data[r][0] || '').trim();
-    if (!label) continue;
-
-    const status = String(data[r][1] || '').trim();
-    const hasMarkers = data[r].slice(2).some(c => String(c).trim() !== '');
-
-    // Check if section header
-    if (!status && !hasMarkers && /^[^\w\s]/.test(label)) {
-      // Section header row
-      const totalWidth = catWidth + months.length * monthWidth;
-      const secCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y3, totalWidth, rh3);
-      secCell.getFill().setSolidFill('#333333');
-      secCell.getBorder().setTransparent();
-      secCell.getText().setText(label);
-      secCell.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#FFFFFF').setFontFamily('Google Sans');
-      y3 += rh3;
-      rowCount3++;
-      continue;
-    }
-
-    // Data row
-    const isComplete = status === 'Complete';
-    const isBehind = status === 'Behind';
-    const bgColor3 = isComplete ? '#E8F5E9' : isBehind ? '#FFEBEE' : (rowCount3 % 2 === 0 ? '#FFFFFF' : '#FAFAFA');
-
-    // Label cell
-    const labelCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y3, catWidth, rh3);
-    labelCell.getFill().setSolidFill(bgColor3);
-    labelCell.getBorder().setTransparent();
-    labelCell.getText().setText(label.substring(0, 35));
-    const labelStyle = labelCell.getText().getTextStyle();
-    labelStyle.setFontSize(5).setFontFamily('Google Sans');
-    labelStyle.setForegroundColor(isComplete ? '#2E7D32' : isBehind ? '#B71C1C' : '#333333');
-
-    // Month markers
-    for (let c = 0; c < months.length; c++) {
-      const val = String(data[r][c + 2] || '').trim();
-      const mCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX + catWidth + c * monthWidth, y3, monthWidth, rh3);
-
-      let mBg = bgColor3;
-      if (val === '✅') mBg = '#C8E6C9';
-      else if (val === '⏳') mBg = '#F3E5F5';
-      else if (val === '🚨') mBg = '#FFCDD2';
-      else if (val && val !== '') mBg = '#E3F2FD';
-
-      mCell.getFill().setSolidFill(mBg);
-      mCell.getBorder().setTransparent();
-      if (val) {
-        // Show abbreviated marker
-        const displayVal = val.length > 4 ? val.substring(0, 3) : val;
-        mCell.getText().setText(displayVal);
-        mCell.getText().getTextStyle().setFontSize(5).setForegroundColor('#333').setFontFamily('Google Sans');
-        mCell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
-      }
-    }
-
-    y3 += rh3;
-    rowCount3++;
-  }
+  addCalArtsBranding_(slide);
 }
 
 
 /**
- * Adds a consistent header bar to the top of a slide.
+ * Full Year Timeline as a detailed month-by-month table slide.
  */
-function addSlideHeader_(slide, title) {
-  // Gold accent bar
-  const bar = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 0, 0, 720, 60);
-  bar.getFill().setSolidFill('#1a1a2e');
-  bar.getBorder().setTransparent();
+function buildFullYearTimelineTableSlide_(deck, ss) {
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.bgWhite);
+  addSlideHeader_(slide, 'Full Year Timeline (FY2027)');
 
-  const headerText = slide.insertTextBox(title, 30, 12, 660, 40);
-  headerText.getText().getTextStyle().setFontSize(22).setBold(true).setForegroundColor('#C9A227').setFontFamily('Google Sans');
+  var fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
+  if (!fytSheet) {
+    var noData = slide.insertTextBox('Full Year Timeline not created.\nRun Setup → Setup Timelines.', 50, 110, 620, 50);
+    noData.getText().getTextStyle().setFontSize(14).setForegroundColor(CA.textLight).setFontFamily(CA.font);
+    addCalArtsBranding_(slide);
+    return;
+  }
+
+  var data = fytSheet.getDataRange().getValues();
+  if (data.length < 6) { addCalArtsBranding_(slide); return; }
+
+  // Month headers from row 5 (index 4), cols C+ (index 2+)
+  var months = [];
+  for (var c = 2; c < data[4].length && c < 18; c++) {
+    var mStr = String(data[4][c] || '').trim();
+    if (mStr) months.push(mStr.replace(/ 20\d\d/, '').substring(0, 3));
+  }
+
+  // Quarter groupings for colored header bands
+  var qColors = [CA.navy, CA.navy, CA.navy, // Q3/Q4 FY2026 (first 3-4)
+    CA.teal, CA.teal, CA.teal,   // Q1 FY2027
+    CA.coral, CA.coral, CA.coral, // Q2 FY2027
+    CA.orange, CA.orange, CA.orange, // Q3 FY2027
+    CA.purple, CA.purple, CA.purple, CA.purple]; // Q4 FY2027
+
+  // Layout
+  var catWidth = 130;
+  var monthWidth = Math.floor((690 - catWidth) / months.length);
+  var startX = 15;
+  var y = 82;
+  var rh = 15;
+
+  // Month header row
+  var catHdr = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y, catWidth, rh + 2);
+  catHdr.getFill().setSolidFill(CA.darkTeal);
+  catHdr.getBorder().setTransparent();
+  catHdr.getText().setText('Category');
+  catHdr.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+
+  months.forEach(function(m, i) {
+    var hColor = qColors[i] || CA.navy;
+    var cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX + catWidth + i * monthWidth, y, monthWidth, rh + 2);
+    cell.getFill().setSolidFill(hColor);
+    cell.getBorder().setTransparent();
+    cell.getText().setText(m);
+    cell.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+    cell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+  });
+  y += rh + 2;
+
+  // Data rows
+  var rowCount = 0;
+  for (var r = 6; r < data.length && rowCount < 24; r++) {
+    var label = String(data[r][0] || '').trim();
+    if (!label) continue;
+
+    var status = String(data[r][1] || '').trim();
+    var hasMarkers = data[r].slice(2).some(function(c2) { return String(c2).trim() !== ''; });
+
+    // Section header
+    if (!status && !hasMarkers && /^[^\w\s]/.test(label)) {
+      var totalWidth = catWidth + months.length * monthWidth;
+      var secCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y, totalWidth, rh);
+      secCell.getFill().setSolidFill(CA.darkTeal);
+      secCell.getBorder().setTransparent();
+      secCell.getText().setText(label);
+      secCell.getText().getTextStyle().setFontSize(5).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+      y += rh;
+      rowCount++;
+      continue;
+    }
+
+    // Data row
+    var isComplete = status === 'Complete';
+    var isBehind = status === 'Behind';
+    var bgColor = isComplete ? '#E8F5E9' : isBehind ? '#FFEBEE' : (rowCount % 2 === 0 ? '#FFFFFF' : CA.cardGray);
+
+    // Label
+    var labelCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y, catWidth, rh);
+    labelCell.getFill().setSolidFill(bgColor);
+    labelCell.getBorder().setTransparent();
+    labelCell.getText().setText(label.substring(0, 32));
+    labelCell.getText().getTextStyle().setFontSize(5).setFontFamily(CA.font);
+    labelCell.getText().getTextStyle().setForegroundColor(isComplete ? CA.green : isBehind ? CA.coral : CA.textDark);
+
+    // Month markers
+    for (var mc = 0; mc < months.length; mc++) {
+      var val = String(data[r][mc + 2] || '').trim();
+      var mCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX + catWidth + mc * monthWidth, y, monthWidth, rh);
+
+      var mBg = bgColor;
+      if (val === '✅') mBg = '#C8E6C9';
+      else if (val === '⏳') mBg = '#E8D5F0';
+      else if (val === '🚨') mBg = '#FFCDD2';
+      else if (val && val !== '') mBg = '#D6EAF8';
+
+      mCell.getFill().setSolidFill(mBg);
+      mCell.getBorder().setTransparent();
+      if (val) {
+        var displayVal = val.length > 4 ? val.substring(0, 3) : val;
+        mCell.getText().setText(displayVal);
+        mCell.getText().getTextStyle().setFontSize(5).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+        mCell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+      }
+    }
+
+    y += rh;
+    rowCount++;
+  }
+
+  addCalArtsBranding_(slide);
+}
+
+
+function buildFullYearTimelineSlide_(deck, ss) {
+  // "Looking Ahead" style slide with quarter badges
+  var slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill(CA.bgWhite);
+  addSlideHeader_(slide, 'Looking Ahead');
+
+  var fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
+  if (!fytSheet) {
+    var noData = slide.insertTextBox('Full Year Timeline not created.\nRun Setup → Setup Timelines.', 50, 110, 620, 50);
+    noData.getText().getTextStyle().setFontSize(14).setForegroundColor(CA.textLight).setFontFamily(CA.font);
+    addCalArtsBranding_(slide);
+    return;
+  }
+
+  var data = fytSheet.getDataRange().getValues();
+  if (data.length < 6) { addCalArtsBranding_(slide); return; }
+
+  // Quarter-based layout (like slide 9) — group milestones by quarter
+  var quarterGroups = {};
+  var quarterOrder = ['Q3 FY2026', 'Q4 FY2026', 'Q1 FY2027', 'Q2 FY2027', 'Q3 FY2027', 'Q4 FY2027'];
+  var quarterLabels = {
+    'Q3 FY2026': 'Mar 2026', 'Q4 FY2026': 'Apr–Jun 2026',
+    'Q1 FY2027': 'Jul–Sep 2026', 'Q2 FY2027': 'Oct–Dec 2026',
+    'Q3 FY2027': 'Jan–Mar 2027', 'Q4 FY2027': 'Spring 2027'
+  };
+  var quarterBadgeColors = [CA.navy, CA.teal, CA.coral, CA.orange, CA.purple, CA.green];
+
+  // Month-to-quarter mapping
+  var monthToQuarter = {
+    'Mar 2026': 'Q3 FY2026',
+    'Apr 2026': 'Q4 FY2026', 'May 2026': 'Q4 FY2026', 'Jun 2026': 'Q4 FY2026',
+    'Jul 2026': 'Q1 FY2027', 'Aug 2026': 'Q1 FY2027', 'Sep 2026': 'Q1 FY2027',
+    'Oct 2026': 'Q2 FY2027', 'Nov 2026': 'Q2 FY2027', 'Dec 2026': 'Q2 FY2027',
+    'Jan 2027': 'Q3 FY2027', 'Feb 2027': 'Q3 FY2027', 'Mar 2027': 'Q3 FY2027',
+    'Apr 2027': 'Q4 FY2027', 'May 2027': 'Q4 FY2027', 'Jun 2027': 'Q4 FY2027'
+  };
+
+  // Month headers from row 5 (index 4)
+  var monthHeaders = [];
+  for (var c = 2; c < data[4].length; c++) {
+    var mStr = String(data[4][c] || '').trim();
+    if (mStr) monthHeaders.push({ col: c, month: mStr });
+  }
+
+  // Scan data rows and group milestones by quarter
+  for (var r = 6; r < data.length; r++) {
+    var label = String(data[r][0] || '').trim();
+    var status = String(data[r][1] || '').trim();
+    if (!label) continue;
+
+    var hasMarkers = data[r].slice(2).some(function(c2) { return String(c2).trim() !== ''; });
+    if (!hasMarkers) continue; // Skip section headers
+
+    // Find which month column has a marker
+    for (var mc2 = 2; mc2 < data[r].length; mc2++) {
+      var val = String(data[r][mc2] || '').trim();
+      if (!val) continue;
+      var mh = monthHeaders.find(function(m) { return m.col === mc2; });
+      if (!mh) continue;
+      var quarter = monthToQuarter[mh.month];
+      if (!quarter) continue;
+      if (!quarterGroups[quarter]) quarterGroups[quarter] = [];
+      quarterGroups[quarter].push({
+        label: label,
+        status: status,
+        marker: val
+      });
+      break;
+    }
+  }
+
+  // Render quarter rows (like the "Looking Ahead" slide with colored badges)
+  var yPos = 95;
+  var leftMargin = 50;
+
+  quarterOrder.forEach(function(q, qIdx) {
+    var items = quarterGroups[q] || [];
+    if (items.length === 0) return;
+
+    var badgeColor = quarterBadgeColors[qIdx % quarterBadgeColors.length];
+
+    // Quarter badge
+    var badge = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, leftMargin, yPos, 65, 20);
+    badge.getFill().setSolidFill(badgeColor);
+    badge.getBorder().setTransparent();
+    badge.getText().setText(quarterLabels[q] || q);
+    badge.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#FFFFFF').setFontFamily(CA.font);
+    badge.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+
+    // "Looking Ahead" label
+    var qLabel = slide.insertTextBox(q, leftMargin + 72, yPos, 80, 20);
+    qLabel.getText().getTextStyle().setFontSize(8).setBold(true).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+
+    // Milestone items (up to 3 per quarter, condensed)
+    var milestoneTexts = items.slice(0, 4).map(function(item) {
+      var prefix = item.status === 'Complete' ? '✅ ' : item.status === 'Behind' ? '🔴 ' : '';
+      return prefix + item.label;
+    });
+
+    var itemsText = milestoneTexts.join('   ·   ');
+    var milestonesBox = slide.insertTextBox(itemsText, leftMargin + 155, yPos, 500, 20);
+    var mStyle = milestonesBox.getText().getTextStyle();
+    mStyle.setFontSize(8).setForegroundColor(CA.textDark).setFontFamily(CA.font);
+
+    if (items.length > 4) {
+      var moreText = slide.insertTextBox('+ ' + (items.length - 4) + ' more', leftMargin + 155, yPos + 16, 200, 14);
+      moreText.getText().getTextStyle().setFontSize(7).setItalic(true).setForegroundColor(CA.textLight).setFontFamily(CA.font);
+      yPos += 14;
+    }
+
+    yPos += 32;
+  });
+
+  addCalArtsBranding_(slide);
 }
