@@ -2190,9 +2190,20 @@ function syncAllSatellitesToMaster() {
       const satSheet = satellite.getSheetByName('Check-In');
       if (!satSheet) continue;
       
-      const masterSheet = ss.getSheetByName(checkIn.activeSheet);
-      if (!masterSheet) continue;
-      
+      let masterSheet = ss.getSheetByName(checkIn.activeSheet);
+      if (!masterSheet) {
+        // Auto-create master check-in tab from Sprint Template
+        const template = ss.getSheetByName(CONFIG.sheets.sprintTemplate);
+        if (template) {
+          masterSheet = template.copyTo(ss);
+          masterSheet.setName(checkIn.activeSheet);
+          masterSheet.getRange('A1').setValue(checkIn.title);
+          masterSheet.getRange('B4').setValue(checkIn.owner || '');
+        } else {
+          continue;
+        }
+      }
+
       // Sync editable sections FROM satellite TO master (dynamic boundaries)
       const satBounds = getSectionBoundaries_(satSheet);
       const masterBounds = getSectionBoundaries_(masterSheet);
@@ -2499,9 +2510,20 @@ function processGranolaNotesForSatellite(satelliteName, granolaText, participant
   // Call Claude to extract structured data from Granola notes
   const extracted = extractMeetingData_(apiKey, granolaText, satelliteName, checkIn.owner);
   
-  // Populate the satellite tracker in master
-  const sheet = ss.getSheetByName(checkIn.activeSheet);
-  if (!sheet) throw new Error('Master sheet "' + checkIn.activeSheet + '" not found.');
+  // Populate the satellite tracker in master (auto-create if missing)
+  let sheet = ss.getSheetByName(checkIn.activeSheet);
+  if (!sheet) {
+    // Create the master check-in tab from the Sprint Template
+    const template = ss.getSheetByName(CONFIG.sheets.sprintTemplate);
+    if (template) {
+      sheet = template.copyTo(ss);
+      sheet.setName(checkIn.activeSheet);
+      sheet.getRange('A1').setValue(checkIn.title);
+      sheet.getRange('B4').setValue(checkIn.owner || '');
+    } else {
+      throw new Error('Master sheet "' + checkIn.activeSheet + '" not found and no Sprint Template to create it from.');
+    }
+  }
 
   // Use dynamic section boundaries so we can expand if items exceed default rows
   const bounds = getSectionBoundaries_(sheet);
