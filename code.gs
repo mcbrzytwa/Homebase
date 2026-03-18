@@ -5402,16 +5402,13 @@ function generateSprintDeckSlides(payloadJson) {
   // 5. Communications & Risks
   buildCommunicationsSlide_(deck, payload.communications || '', payload.risks || '');
 
-  // 6. Action Items by Satellite
-  buildActionItemsSlide_(deck, ss);
-
-  // 7. Next 6 Sprints Timeline (full table)
+  // 6. Next 6 Sprints Timeline (full table)
   buildNext6SprintsSlide_(deck, ss);
 
-  // 8. Full Year Timeline (detailed table)
+  // 7. Full Year Timeline (detailed table)
   buildFullYearTimelineTableSlide_(deck, ss);
 
-  // 9. Looking Ahead (quarter summary)
+  // 8. Looking Ahead (quarter summary)
   buildFullYearTimelineSlide_(deck, ss);
 
   return deck.getUrl();
