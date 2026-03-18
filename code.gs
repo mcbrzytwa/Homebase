@@ -178,7 +178,8 @@ function onOpen() {
       .addItem('🔄 Sync Meeting Log from Calendar', 'syncMeetingLogFromCalendar'))
     .addSeparator()
     .addSubMenu(ui.createMenu('📊 Sprint Deck')
-      .addItem('📊 Generate Sprint Deck Data', 'generateSprintDeckData')
+      .addItem('🎬 Generate Sprint Deck (Google Slides)', 'launchSprintDeckWizard')
+      .addItem('📊 Generate Sprint Deck Data (Sheet)', 'generateSprintDeckData')
       .addItem('📧 Send Sprint Summary Email', 'sendSprintSummaryEmail'))
     .addSeparator()
     .addSubMenu(ui.createMenu('📧 Communication')
@@ -1929,14 +1930,19 @@ function newSprintRollover() {
     syncArchivesToAllSatellites();
 
     ss.toast('Sprint rollover complete!', '✅ Success', 5);
-    
-    ui.alert(
+
+    const deckResponse = ui.alert(
       '✅ Sprint Rollover Complete!',
       newSprintName + ' has been created and pushed to all satellites.\n\n' +
       'Previous sprint "' + currentSprint.name + '" has been archived.\n' +
-      'Satellite tracker snapshots saved to archive.',
-      ui.ButtonSet.OK
+      'Satellite tracker snapshots saved to archive.\n\n' +
+      'Would you like to generate the Sprint Deck now?',
+      ui.ButtonSet.YES_NO
     );
+
+    if (deckResponse === ui.Button.YES) {
+      launchSprintDeckWizard();
+    }
     
   } catch (error) {
     ui.alert('❌ Error', 'Sprint rollover failed: ' + error.message, ui.ButtonSet.OK);
@@ -3622,8 +3628,15 @@ function createReadmeSheet_(ss) {
 
   // ---- HOW TO: GENERATE SPRINT DECK ----
   addSection('📊 How To: Generate Sprint Deck');
-  addLine('1. Go to: 🎛️ CCAT System → 📊 Sprint Deck → 📊 Generate Sprint Deck Data');
-  addLine('2. This creates a summary sheet with: sprint overview, OKR progress, timeline snapshot, action items');
+  addLine('Option A — Google Slides Deck (Recommended):');
+  addLine('  1. Go to: 🎛️ CCAT System → 📊 Sprint Deck → 🎬 Generate Sprint Deck (Google Slides)');
+  addLine('  2. A wizard walks you through: milestones achieved, what\'s next, communications, risks');
+  addLine('  3. The deck is generated at a stable URL (same link every sprint)');
+  addLine('  4. The previous deck is archived as a copy before rebuilding');
+  addLine('  5. The deck is also offered at the end of Sprint Rollover');
+  addLine('Option B — Spreadsheet Data:');
+  addLine('  1. Go to: 🎛️ CCAT System → 📊 Sprint Deck → 📊 Generate Sprint Deck Data (Sheet)');
+  addLine('  2. This creates a summary sheet for manual embedding in Google Slides');
   addLine('3. To email a summary: 📊 Sprint Deck → 📧 Send Sprint Summary Email');
   addBlank();
 
@@ -4962,4 +4975,922 @@ function getSystemMapHtml_() {
     '<div class="legend-item"><div class="legend-color green"></div><span>View-Only Satellites</span></div>' +
     '</div>' +
     '</div></body></html>';
+}
+
+
+// ============================================================================
+// SPRINT DECK WIZARD — Google Slides Generation
+// ============================================================================
+
+/**
+ * Launches the Sprint Deck Wizard — a multi-step dialog that collects user
+ * input (milestones achieved, what's next, communications) and then generates
+ * a Google Slides presentation.
+ *
+ * The deck is created/updated at the same URL every sprint. Before rebuilding,
+ * a timestamped copy is archived.
+ */
+function launchSprintDeckWizard() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sprintInfo = getCurrentSprintInfo_(ss);
+
+  // Gather pre-populated data for the dialog
+  const milestonesSuggested = gatherPlannedMilestones_(ss);
+  const actionSummary = gatherActionSummary_(ss);
+
+  const html = buildSprintDeckWizardHtml_(sprintInfo, milestonesSuggested, actionSummary);
+  const htmlOutput = HtmlService.createHtmlOutput(html).setWidth(720).setHeight(700);
+  ui.showModalDialog(htmlOutput, '🎬 Sprint Deck Wizard — ' + sprintInfo.name);
+}
+
+
+/**
+ * Gathers planned milestones from the Full Year Timeline that fall in the
+ * current sprint's date range. These become the "did we achieve this?" prompts.
+ */
+function gatherPlannedMilestones_(ss) {
+  const milestones = [];
+  const sprintInfo = getCurrentSprintInfo_(ss);
+
+  // Get milestones from Full Year Timeline
+  const fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
+  if (fytSheet) {
+    const data = fytSheet.getDataRange().getValues();
+    let currentCat = '';
+    for (let r = 6; r < data.length; r++) {
+      const label = String(data[r][0] || '').trim();
+      const status = String(data[r][1] || '').trim();
+      if (!label) continue;
+
+      // Category headers have no status and no markers
+      if (!status && !data[r].slice(2).some(c => String(c).trim() !== '')) {
+        if (/^[^\w\s]/.test(label) && label.length > 2) {
+          currentCat = label;
+          continue;
+        }
+      }
+
+      // Check for markers in month columns — find which month
+      for (let c = 2; c < data[r].length; c++) {
+        const val = String(data[r][c]).trim();
+        if (val && val !== '') {
+          milestones.push({
+            label: label,
+            category: currentCat,
+            status: status,
+            marker: val
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // Also get completed action items from this sprint's RACI
+  const raciSheet = ss.getSheetByName(CONFIG.sheets.masterRaci);
+  if (raciSheet) {
+    const raciData = raciSheet.getDataRange().getValues();
+    for (let r = 1; r < raciData.length; r++) {
+      const task = String(raciData[r][1] || '').trim();
+      const statusVal = String(raciData[r][4] || '').toLowerCase();
+      if (task && (statusVal === 'complete' || statusVal === 'done')) {
+        milestones.push({
+          label: task,
+          category: '📋 Completed Action Items',
+          status: 'Complete',
+          marker: '✅'
+        });
+      }
+    }
+  }
+
+  return milestones;
+}
+
+
+/**
+ * Gathers action item summary by satellite for the deck.
+ */
+function gatherActionSummary_(ss) {
+  const summary = [];
+  CONFIG.checkIns.forEach(checkIn => {
+    if (checkIn.type === 'okr') return;
+    const sheet = ss.getSheetByName(checkIn.activeSheet);
+    if (!sheet) return;
+
+    const bounds = getSectionBoundaries_(sheet);
+    if (!bounds.actions) return;
+
+    const actions = readSectionData_(sheet, bounds.actions);
+    let total = 0, complete = 0, inProgress = 0, blocked = 0;
+    actions.forEach(row => {
+      if (!row[0] || String(row[0]).trim() === '') return;
+      total++;
+      const s = String(row[3] || '').toLowerCase();
+      if (s === 'complete' || s === 'done') complete++;
+      else if (s === 'in progress') inProgress++;
+      else if (s === 'blocked') blocked++;
+    });
+    if (total > 0) {
+      summary.push({ name: checkIn.name, owner: checkIn.owner, total: total, complete: complete, inProgress: inProgress, blocked: blocked });
+    }
+  });
+  return summary;
+}
+
+
+/**
+ * Builds the multi-step wizard HTML dialog.
+ */
+function buildSprintDeckWizardHtml_(sprintInfo, milestones, actionSummary) {
+  // Build milestone checkboxes grouped by category
+  const categories = {};
+  milestones.forEach(m => {
+    const cat = m.category || 'Other';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(m);
+  });
+
+  let milestonesHtml = '';
+  for (const [cat, items] of Object.entries(categories)) {
+    milestonesHtml += '<div class="cat-label">' + cat + '</div>';
+    items.forEach((item, i) => {
+      const checked = item.status === 'Complete' ? ' checked' : '';
+      const id = 'ms_' + cat.replace(/[^a-zA-Z0-9]/g, '') + '_' + i;
+      milestonesHtml += '<label class="cb-label"><input type="checkbox" id="' + id + '" value="' +
+        item.label.replace(/"/g, '&quot;') + '"' + checked + '> ' + item.label + '</label>';
+    });
+  }
+
+  let summaryHtml = '';
+  actionSummary.forEach(s => {
+    summaryHtml += '<tr><td>' + s.name + '</td><td>' + s.total + '</td><td>' + s.complete + '</td><td>' + s.inProgress + '</td><td>' + s.blocked + '</td></tr>';
+  });
+
+  return '<!DOCTYPE html><html><head><style>' +
+    'body { font-family: "Google Sans", Arial, sans-serif; padding: 0; margin: 0; font-size: 13px; }' +
+    '.step { display: none; padding: 16px; }' +
+    '.step.active { display: block; }' +
+    'h2 { font-size: 16px; margin: 0 0 12px 0; color: #1a73e8; }' +
+    'h3 { font-size: 14px; margin: 8px 0 6px 0; }' +
+    '.cat-label { font-weight: bold; margin: 10px 0 4px 0; color: #333; font-size: 12px; }' +
+    '.cb-label { display: block; margin: 2px 0; padding: 3px 0; font-size: 12px; }' +
+    '.cb-label:hover { background: #f0f4ff; }' +
+    'textarea { width: 100%; height: 100px; margin: 6px 0; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 12px; box-sizing: border-box; }' +
+    'input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin: 6px 0; box-sizing: border-box; }' +
+    '.btn-row { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; background: #fafafa; position: sticky; bottom: 0; }' +
+    '.btn { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }' +
+    '.btn-primary { background: #1a73e8; color: white; }' +
+    '.btn-primary:hover { background: #1557b0; }' +
+    '.btn-secondary { background: #e8eaed; color: #333; }' +
+    '.btn-secondary:hover { background: #d2d5d9; }' +
+    '.ms-list { max-height: 200px; overflow-y: auto; border: 1px solid #eee; padding: 8px; border-radius: 4px; }' +
+    '.progress { display: flex; gap: 4px; padding: 10px 16px; background: #f8f9fa; border-bottom: 1px solid #eee; }' +
+    '.dot { width: 10px; height: 10px; border-radius: 50%; background: #ddd; }' +
+    '.dot.active { background: #1a73e8; }' +
+    '.dot.done { background: #0f9d58; }' +
+    'table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }' +
+    'th, td { padding: 4px 8px; border: 1px solid #ddd; text-align: left; }' +
+    'th { background: #e8eaed; font-weight: bold; }' +
+    '.hint { color: #666; font-size: 11px; margin: 2px 0 8px 0; }' +
+    '</style></head><body>' +
+
+    // Progress dots
+    '<div class="progress">' +
+    '<div class="dot active" id="dot0"></div>' +
+    '<div class="dot" id="dot1"></div>' +
+    '<div class="dot" id="dot2"></div>' +
+    '<div class="dot" id="dot3"></div>' +
+    '</div>' +
+
+    // STEP 0: Milestones Achieved
+    '<div class="step active" id="step0">' +
+    '<h2>Step 1: Milestones Achieved This Sprint</h2>' +
+    '<p class="hint">Check off milestones completed during ' + sprintInfo.name + '. Add any unlisted achievements below.</p>' +
+    '<div class="ms-list">' + (milestonesHtml || '<p style="color:#999">No milestones found for this period.</p>') + '</div>' +
+    '<h3>Additional achievements (one per line):</h3>' +
+    '<textarea id="extraMilestones" placeholder="e.g., Secured keynote speaker for fall event\nCompleted BB6 equipment procurement"></textarea>' +
+    '</div>' +
+
+    // STEP 1: What's Next
+    '<div class="step" id="step1">' +
+    '<h2>Step 2: What\'s Next</h2>' +
+    '<p class="hint">Key priorities and focus areas for the upcoming sprint.</p>' +
+    '<textarea id="whatsNext" style="height:150px" placeholder="e.g.,\n- Finalize JD postings and open search\n- Complete budget deep-dive with Chanel\n- Prepare for Yana presentation (Mar 27)"></textarea>' +
+    '<h3>Current Action Item Summary:</h3>' +
+    '<table><tr><th>Satellite</th><th>Total</th><th>Done</th><th>Active</th><th>Blocked</th></tr>' +
+    summaryHtml +
+    '</table>' +
+    '</div>' +
+
+    // STEP 2: Communications
+    '<div class="step" id="step2">' +
+    '<h2>Step 3: Communications & Updates</h2>' +
+    '<p class="hint">Key messages, announcements, or stakeholder communications.</p>' +
+    '<textarea id="communications" style="height:120px" placeholder="e.g.,\n- Email sent to Provost with tech assessment findings\n- Yana briefed on hiring timeline\n- Katie aligned on advancement budget ask"></textarea>' +
+    '<h3>Risks / Blockers:</h3>' +
+    '<textarea id="risks" style="height:80px" placeholder="e.g.,\n- BB6 construction timeline at risk if permits delayed\n- Director ML search may need extended window"></textarea>' +
+    '</div>' +
+
+    // STEP 3: Confirm & Generate
+    '<div class="step" id="step3">' +
+    '<h2>Step 4: Review & Generate Deck</h2>' +
+    '<p>The deck will include these slides:</p>' +
+    '<ol style="font-size:12px; line-height:1.8">' +
+    '<li><strong>Title Slide</strong> — ' + sprintInfo.name + ' (' + sprintInfo.dates + ')</li>' +
+    '<li><strong>Sprint Intent & OKR Status</strong></li>' +
+    '<li><strong>Milestones Achieved</strong> — your selections from Step 1</li>' +
+    '<li><strong>What\'s Next</strong> — your input from Step 2</li>' +
+    '<li><strong>Communications & Risks</strong> — Step 3 input</li>' +
+    '<li><strong>Action Items by Satellite</strong></li>' +
+    '<li><strong>Next 6 Sprints Timeline</strong></li>' +
+    '<li><strong>Full Year Timeline</strong></li>' +
+    '</ol>' +
+    '<p class="hint">The existing deck will be archived as a copy before rebuilding. The URL stays the same.</p>' +
+    '<div id="genStatus" style="display:none; padding: 12px; background: #e8f5e9; border-radius: 4px; margin-top: 8px; font-weight: bold;"></div>' +
+    '</div>' +
+
+    // Navigation buttons
+    '<div class="btn-row">' +
+    '<button class="btn btn-secondary" id="btnBack" onclick="prevStep()" style="display:none">Back</button>' +
+    '<div style="flex:1"></div>' +
+    '<button class="btn btn-primary" id="btnNext" onclick="nextStep()">Next →</button>' +
+    '</div>' +
+
+    '<script>' +
+    'var currentStep = 0;' +
+    'var totalSteps = 4;' +
+
+    'function updateUI() {' +
+    '  for (var i = 0; i < totalSteps; i++) {' +
+    '    document.getElementById("step" + i).className = i === currentStep ? "step active" : "step";' +
+    '    var dot = document.getElementById("dot" + i);' +
+    '    dot.className = i < currentStep ? "dot done" : (i === currentStep ? "dot active" : "dot");' +
+    '  }' +
+    '  document.getElementById("btnBack").style.display = currentStep > 0 ? "" : "none";' +
+    '  if (currentStep === totalSteps - 1) {' +
+    '    document.getElementById("btnNext").textContent = "🎬 Generate Deck";' +
+    '  } else {' +
+    '    document.getElementById("btnNext").textContent = "Next →";' +
+    '  }' +
+    '}' +
+
+    'function nextStep() {' +
+    '  if (currentStep < totalSteps - 1) {' +
+    '    currentStep++;' +
+    '    updateUI();' +
+    '  } else {' +
+    '    generateDeck();' +
+    '  }' +
+    '}' +
+
+    'function prevStep() {' +
+    '  if (currentStep > 0) { currentStep--; updateUI(); }' +
+    '}' +
+
+    'function generateDeck() {' +
+    '  var btn = document.getElementById("btnNext");' +
+    '  btn.disabled = true;' +
+    '  btn.textContent = "Generating...";' +
+    '  var status = document.getElementById("genStatus");' +
+    '  status.style.display = "block";' +
+    '  status.textContent = "Creating deck... this may take 30-60 seconds.";' +
+
+    '  var achieved = [];' +
+    '  var checkboxes = document.querySelectorAll(".ms-list input[type=checkbox]:checked");' +
+    '  for (var i = 0; i < checkboxes.length; i++) { achieved.push(checkboxes[i].value); }' +
+    '  var extra = document.getElementById("extraMilestones").value;' +
+    '  if (extra.trim()) {' +
+    '    extra.split("\\n").forEach(function(line) { if (line.trim()) achieved.push(line.trim()); });' +
+    '  }' +
+
+    '  var payload = {' +
+    '    achieved: achieved,' +
+    '    whatsNext: document.getElementById("whatsNext").value,' +
+    '    communications: document.getElementById("communications").value,' +
+    '    risks: document.getElementById("risks").value' +
+    '  };' +
+
+    '  google.script.run' +
+    '    .withSuccessHandler(function(url) {' +
+    '      status.innerHTML = "✅ Deck generated! <a href=\\"" + url + "\\" target=\\"_blank\\">Open Deck →</a>";' +
+    '      btn.textContent = "Done";' +
+    '    })' +
+    '    .withFailureHandler(function(err) {' +
+    '      status.style.background = "#fce4ec";' +
+    '      status.textContent = "Error: " + err.message;' +
+    '      btn.disabled = false;' +
+    '      btn.textContent = "🎬 Retry";' +
+    '    })' +
+    '    .generateSprintDeckSlides(JSON.stringify(payload));' +
+    '}' +
+    '</script></body></html>';
+}
+
+
+/**
+ * Server-side handler: generates (or regenerates) the sprint deck as Google Slides.
+ * Archives the old deck as a copy, clears the original, and rebuilds all slides.
+ *
+ * @param {string} payloadJson - JSON with achieved, whatsNext, communications, risks
+ * @returns {string} URL of the generated deck
+ */
+function generateSprintDeckSlides(payloadJson) {
+  const payload = JSON.parse(payloadJson);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sprintInfo = getCurrentSprintInfo_(ss);
+  const props = PropertiesService.getScriptProperties();
+
+  // ---- Get or create the deck ----
+  let deckId = props.getProperty('SPRINT_DECK_ID');
+  let deck;
+
+  if (deckId) {
+    try {
+      deck = SlidesApp.openById(deckId);
+
+      // Archive the old deck as a copy before rebuilding
+      const archiveName = 'CCAT Sprint Deck — ' + sprintInfo.name + ' (Archived ' +
+        Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') + ')';
+      DriveApp.getFileById(deckId).makeCopy(archiveName);
+
+      // Clear all existing slides
+      const slides = deck.getSlides();
+      for (let i = slides.length - 1; i >= 0; i--) {
+        slides[i].remove();
+      }
+    } catch (e) {
+      // Deck was deleted or inaccessible — create a new one
+      deckId = null;
+    }
+  }
+
+  if (!deckId) {
+    deck = SlidesApp.create('CCAT Sprint Deck — ' + sprintInfo.name);
+    deckId = deck.getId();
+    props.setProperty('SPRINT_DECK_ID', deckId);
+
+    // Move to same folder as the spreadsheet
+    try {
+      const folder = DriveApp.getFileById(ss.getId()).getParents().next();
+      DriveApp.getFileById(deckId).moveTo(folder);
+    } catch (e) { /* fine if folder move fails */ }
+
+    // Remove default blank slide
+    const defaultSlides = deck.getSlides();
+    if (defaultSlides.length > 0) defaultSlides[0].remove();
+  }
+
+  // Update deck title
+  deck.setName('CCAT Sprint Deck — ' + sprintInfo.name);
+
+  // ---- Build slides ----
+
+  // 1. Title Slide
+  buildTitleSlide_(deck, sprintInfo);
+
+  // 2. Sprint Intent & OKR Status
+  buildIntentOKRSlide_(deck, ss, sprintInfo);
+
+  // 3. Milestones Achieved
+  buildMilestonesSlide_(deck, payload.achieved || []);
+
+  // 4. What's Next
+  buildWhatsNextSlide_(deck, payload.whatsNext || '');
+
+  // 5. Communications & Risks
+  buildCommunicationsSlide_(deck, payload.communications || '', payload.risks || '');
+
+  // 6. Action Items by Satellite
+  buildActionItemsSlide_(deck, ss);
+
+  // 7. Next 6 Sprints Timeline
+  buildNext6SprintsSlide_(deck, ss);
+
+  // 8. Full Year Timeline
+  buildFullYearTimelineSlide_(deck, ss);
+
+  return deck.getUrl();
+}
+
+
+// ---- Slide Builder Helpers ----
+
+function buildTitleSlide_(deck, sprintInfo) {
+  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+
+  // Background
+  slide.getBackground().setSolidFill('#1a1a2e');
+
+  // CCAT title
+  const title = slide.insertTextBox('🏛️ CCAT Sprint Update', 40, 120, 640, 60);
+  title.getText().getTextStyle().setFontSize(32).setForegroundColor('#C9A227').setBold(true).setFontFamily('Google Sans');
+
+  // Sprint name
+  const sprintName = slide.insertTextBox(sprintInfo.name, 40, 200, 640, 50);
+  sprintName.getText().getTextStyle().setFontSize(28).setForegroundColor('#FFFFFF').setBold(true).setFontFamily('Google Sans');
+
+  // Dates
+  const dates = slide.insertTextBox(sprintInfo.dates, 40, 260, 640, 35);
+  dates.getText().getTextStyle().setFontSize(18).setForegroundColor('#9CA3AF').setFontFamily('Google Sans');
+
+  // Intent
+  if (sprintInfo.intent) {
+    const intent = slide.insertTextBox('"' + sprintInfo.intent + '"', 40, 320, 640, 60);
+    intent.getText().getTextStyle().setFontSize(14).setForegroundColor('#D4D4D8').setItalic(true).setFontFamily('Google Sans');
+  }
+
+  // Date stamp
+  const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy');
+  const stamp = slide.insertTextBox(dateStr, 40, 420, 300, 25);
+  stamp.getText().getTextStyle().setFontSize(11).setForegroundColor('#6B7280').setFontFamily('Google Sans');
+}
+
+
+function buildIntentOKRSlide_(deck, ss, sprintInfo) {
+  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill('#FFFFFF');
+
+  // Header
+  addSlideHeader_(slide, 'Sprint Intent & OKR Status');
+
+  // Intent box
+  const intentBox = slide.insertTextBox('Sprint Intent: ' + (sprintInfo.intent || 'Not set'), 40, 80, 640, 40);
+  intentBox.getText().getTextStyle().setFontSize(14).setForegroundColor('#1a1a2e').setItalic(true).setFontFamily('Google Sans');
+
+  // OKR Status
+  const okrSheet = ss.getSheetByName(CONFIG.sheets.okrs);
+  const counts = { 'Complete': 0, 'In Progress': 0, 'Not Started': 0, 'Blocked': 0 };
+
+  if (okrSheet) {
+    const data = okrSheet.getDataRange().getValues();
+    const cols = CONFIG.okrColumns;
+    for (let i = 3; i < data.length; i++) {
+      const status = data[i][cols.status - 1];
+      if (status && counts.hasOwnProperty(status)) counts[status]++;
+    }
+  }
+
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
+  // Status boxes (2x2 grid)
+  const statItems = [
+    { label: '✅ Complete', val: counts['Complete'], color: '#C8E6C9', x: 40 },
+    { label: '🔄 In Progress', val: counts['In Progress'], color: '#BBDEFB', x: 200 },
+    { label: '⏸️ Not Started', val: counts['Not Started'], color: '#F5F5F5', x: 360 },
+    { label: '🚫 Blocked', val: counts['Blocked'], color: '#FFCDD2', x: 520 }
+  ];
+
+  statItems.forEach(item => {
+    const box = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, item.x, 140, 145, 90);
+    box.getFill().setSolidFill(item.color);
+    box.getBorder().getLineFill().setSolidFill('#CCCCCC');
+    box.getBorder().setWeight(1);
+    const text = box.getText();
+    text.setText(item.val + '\n' + item.label);
+    const style = text.getTextStyle();
+    style.setFontSize(11).setFontFamily('Google Sans');
+    text.getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+    // Make the number large
+    text.getRange(0, String(item.val).length).getTextStyle().setFontSize(28).setBold(true);
+  });
+
+  // Progress bar
+  if (total > 0) {
+    const pctComplete = counts['Complete'] / total;
+    const barWidth = 640;
+    const barY = 260;
+
+    // Background bar
+    const bgBar = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 40, barY, barWidth, 16);
+    bgBar.getFill().setSolidFill('#E0E0E0');
+    bgBar.getBorder().setTransparent();
+
+    // Progress fill
+    if (pctComplete > 0) {
+      const fillWidth = Math.max(16, barWidth * pctComplete);
+      const fillBar = slide.insertShape(SlidesApp.ShapeType.ROUND_RECTANGLE, 40, barY, fillWidth, 16);
+      fillBar.getFill().setSolidFill('#4CAF50');
+      fillBar.getBorder().setTransparent();
+    }
+
+    const pctText = slide.insertTextBox(Math.round(pctComplete * 100) + '% of OKRs Complete (' + total + ' total)', 40, barY + 20, barWidth, 20);
+    pctText.getText().getTextStyle().setFontSize(10).setForegroundColor('#666').setFontFamily('Google Sans');
+  }
+}
+
+
+function buildMilestonesSlide_(deck, achieved) {
+  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill('#FFFFFF');
+
+  addSlideHeader_(slide, 'Milestones Achieved');
+
+  if (achieved.length === 0) {
+    const noItems = slide.insertTextBox('No milestones marked as achieved this sprint.', 40, 100, 640, 30);
+    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setItalic(true).setFontFamily('Google Sans');
+    return;
+  }
+
+  // Build milestone list — split into two columns if many items
+  const maxPerSlide = 12;
+  const items = achieved.slice(0, maxPerSlide);
+  const midpoint = Math.ceil(items.length / 2);
+
+  const col1Items = items.slice(0, midpoint);
+  const col2Items = items.slice(midpoint);
+
+  const col1Text = col1Items.map(m => '✅  ' + m).join('\n\n');
+  const col2Text = col2Items.map(m => '✅  ' + m).join('\n\n');
+
+  const col1 = slide.insertTextBox(col1Text, 40, 90, 320, 340);
+  col1.getText().getTextStyle().setFontSize(11).setForegroundColor('#1a1a2e').setFontFamily('Google Sans');
+
+  if (col2Text) {
+    const col2 = slide.insertTextBox(col2Text, 370, 90, 320, 340);
+    col2.getText().getTextStyle().setFontSize(11).setForegroundColor('#1a1a2e').setFontFamily('Google Sans');
+  }
+}
+
+
+function buildWhatsNextSlide_(deck, whatsNext) {
+  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill('#FFFFFF');
+
+  addSlideHeader_(slide, "What's Next");
+
+  if (!whatsNext.trim()) {
+    const noItems = slide.insertTextBox('No priorities specified.', 40, 100, 640, 30);
+    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setItalic(true).setFontFamily('Google Sans');
+    return;
+  }
+
+  // Parse bullet points — add bullet markers if not present
+  const lines = whatsNext.split('\n').filter(l => l.trim());
+  const formatted = lines.map(line => {
+    line = line.trim();
+    if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+      return '→  ' + line.replace(/^[-•*]\s*/, '');
+    }
+    return '→  ' + line;
+  }).join('\n\n');
+
+  const body = slide.insertTextBox(formatted, 40, 90, 640, 350);
+  body.getText().getTextStyle().setFontSize(13).setForegroundColor('#1a1a2e').setFontFamily('Google Sans');
+}
+
+
+function buildCommunicationsSlide_(deck, communications, risks) {
+  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill('#FFFFFF');
+
+  addSlideHeader_(slide, 'Communications & Risks');
+
+  let yPos = 85;
+
+  // Communications section
+  if (communications.trim()) {
+    const commHeader = slide.insertTextBox('📣 Communications', 40, yPos, 640, 25);
+    commHeader.getText().getTextStyle().setFontSize(14).setBold(true).setForegroundColor('#1a73e8').setFontFamily('Google Sans');
+    yPos += 30;
+
+    const lines = communications.split('\n').filter(l => l.trim());
+    const formatted = lines.map(l => {
+      l = l.trim();
+      return (l.startsWith('-') || l.startsWith('•')) ? '•  ' + l.replace(/^[-•]\s*/, '') : '•  ' + l;
+    }).join('\n');
+
+    const commBody = slide.insertTextBox(formatted, 40, yPos, 640, Math.min(lines.length * 22, 160));
+    commBody.getText().getTextStyle().setFontSize(12).setForegroundColor('#333').setFontFamily('Google Sans');
+    yPos += Math.min(lines.length * 22, 160) + 15;
+  }
+
+  // Risks section
+  if (risks.trim()) {
+    const riskHeader = slide.insertTextBox('⚠️ Risks & Blockers', 40, yPos, 640, 25);
+    riskHeader.getText().getTextStyle().setFontSize(14).setBold(true).setForegroundColor('#B71C1C').setFontFamily('Google Sans');
+    yPos += 30;
+
+    const lines = risks.split('\n').filter(l => l.trim());
+    const formatted = lines.map(l => {
+      l = l.trim();
+      return (l.startsWith('-') || l.startsWith('•')) ? '🔴  ' + l.replace(/^[-•]\s*/, '') : '🔴  ' + l;
+    }).join('\n');
+
+    const riskBody = slide.insertTextBox(formatted, 40, yPos, 640, Math.min(lines.length * 22, 160));
+    riskBody.getText().getTextStyle().setFontSize(12).setForegroundColor('#333').setFontFamily('Google Sans');
+  }
+
+  if (!communications.trim() && !risks.trim()) {
+    const noItems = slide.insertTextBox('No communications or risks noted.', 40, 100, 640, 30);
+    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setItalic(true).setFontFamily('Google Sans');
+  }
+}
+
+
+function buildActionItemsSlide_(deck, ss) {
+  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill('#FFFFFF');
+
+  addSlideHeader_(slide, 'Action Items by Satellite');
+
+  const summary = gatherActionSummary_(ss);
+
+  if (summary.length === 0) {
+    const noItems = slide.insertTextBox('No action items tracked.', 40, 100, 640, 30);
+    noItems.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setItalic(true).setFontFamily('Google Sans');
+    return;
+  }
+
+  // Table header
+  const headers = ['Satellite', 'Owner', 'Total', 'Done', 'Active', 'Blocked'];
+  const colWidths = [130, 110, 70, 70, 70, 70];
+  const colXs = [];
+  let xPos = 55;
+  colWidths.forEach(w => { colXs.push(xPos); xPos += w; });
+
+  let yPos = 90;
+  const rowHeight = 28;
+
+  // Header row
+  headers.forEach((h, i) => {
+    const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
+    cell.getFill().setSolidFill('#1a73e8');
+    cell.getBorder().getLineFill().setSolidFill('#1557b0');
+    cell.getBorder().setWeight(1);
+    cell.getText().setText(h);
+    cell.getText().getTextStyle().setFontSize(10).setBold(true).setForegroundColor('#FFFFFF').setFontFamily('Google Sans');
+    cell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+  });
+
+  yPos += rowHeight;
+
+  // Data rows
+  summary.forEach((s, rowIdx) => {
+    const bgColor = rowIdx % 2 === 0 ? '#FFFFFF' : '#F8F9FA';
+    const vals = [s.name, s.owner, String(s.total), String(s.complete), String(s.inProgress), String(s.blocked)];
+    vals.forEach((v, i) => {
+      const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
+      cell.getFill().setSolidFill(bgColor);
+      cell.getBorder().getLineFill().setSolidFill('#E0E0E0');
+      cell.getBorder().setWeight(1);
+      cell.getText().setText(v);
+      cell.getText().getTextStyle().setFontSize(10).setForegroundColor('#333').setFontFamily('Google Sans');
+      cell.getText().getParagraphStyle().setParagraphAlignment(i >= 2 ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.START);
+
+      // Highlight blocked
+      if (i === 5 && parseInt(v) > 0) {
+        cell.getFill().setSolidFill('#FFCDD2');
+        cell.getText().getTextStyle().setBold(true).setForegroundColor('#B71C1C');
+      }
+    });
+    yPos += rowHeight;
+  });
+
+  // Totals row
+  const totals = summary.reduce((acc, s) => {
+    acc.total += s.total; acc.complete += s.complete; acc.inProgress += s.inProgress; acc.blocked += s.blocked;
+    return acc;
+  }, { total: 0, complete: 0, inProgress: 0, blocked: 0 });
+
+  const totalVals = ['TOTAL', '', String(totals.total), String(totals.complete), String(totals.inProgress), String(totals.blocked)];
+  totalVals.forEach((v, i) => {
+    const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs[i], yPos, colWidths[i], rowHeight);
+    cell.getFill().setSolidFill('#E8EAF6');
+    cell.getBorder().getLineFill().setSolidFill('#C5CAE9');
+    cell.getBorder().setWeight(1);
+    cell.getText().setText(v);
+    cell.getText().getTextStyle().setFontSize(10).setBold(true).setForegroundColor('#1a1a2e').setFontFamily('Google Sans');
+    cell.getText().getParagraphStyle().setParagraphAlignment(i >= 2 ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.START);
+  });
+}
+
+
+function buildNext6SprintsSlide_(deck, ss) {
+  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill('#FFFFFF');
+
+  addSlideHeader_(slide, 'Next 6 Sprints — Planning View');
+
+  const n6Sheet = ss.getSheetByName(CONFIG.sheets.next6Sprints);
+  if (!n6Sheet) {
+    const noData = slide.insertTextBox('Next 6 Sprints sheet not created yet.\nRun Setup → Setup Timelines.', 40, 100, 640, 50);
+    noData.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setFontFamily('Google Sans');
+    return;
+  }
+
+  const data = n6Sheet.getDataRange().getValues();
+  if (data.length < 4) return;
+
+  // Sprint column headers (row 3, cols D-I = index 3-8)
+  const sprintHeaders = [];
+  for (let c = 3; c <= 8 && c < data[2].length; c++) {
+    sprintHeaders.push(String(data[2][c] || '').replace(/\n/g, ' '));
+  }
+
+  // Compact: show sprint headers + rows with markers
+  const colWidths2 = [200, 70];
+  sprintHeaders.forEach(() => colWidths2.push(65));
+
+  const colXs2 = [];
+  let x2 = 20;
+  colWidths2.forEach(w => { colXs2.push(x2); x2 += w; });
+
+  let y2 = 85;
+  const rh = 20;
+
+  // Header row
+  const hdrVals = ['Task / Milestone', 'Status'].concat(sprintHeaders.map(h => h.replace(/Sprint \d+ /, 'S')));
+  hdrVals.forEach((h, i) => {
+    const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[i], y2, colWidths2[i], rh);
+    cell.getFill().setSolidFill('#333333');
+    cell.getBorder().setTransparent();
+    cell.getText().setText(h);
+    cell.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#FFFFFF').setFontFamily('Google Sans');
+  });
+  y2 += rh;
+
+  // Data rows (skip header rows, limit to fit on slide)
+  let rowCount = 0;
+  for (let r = 3; r < data.length && rowCount < 18; r++) {
+    const task = String(data[r][0] || '').trim();
+    if (!task) continue;
+
+    // Skip section header rows (they have content only in col A)
+    const hasMarkers = data[r].slice(3, 9).some(c => String(c).trim() !== '');
+    const statusVal = String(data[r][2] || '').trim();
+
+    if (!hasMarkers && !statusVal) {
+      // Section header
+      const headerCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[0], y2, x2 - colXs2[0], rh);
+      headerCell.getFill().setSolidFill('#E8EAF6');
+      headerCell.getBorder().setTransparent();
+      headerCell.getText().setText(task);
+      headerCell.getText().getTextStyle().setFontSize(7).setBold(true).setForegroundColor('#333').setFontFamily('Google Sans');
+      y2 += rh;
+      rowCount++;
+      continue;
+    }
+
+    const bgColor = rowCount % 2 === 0 ? '#FFFFFF' : '#FAFAFA';
+
+    // Task name
+    const taskCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[0], y2, colWidths2[0], rh);
+    taskCell.getFill().setSolidFill(bgColor);
+    taskCell.getBorder().setTransparent();
+    taskCell.getText().setText(task.substring(0, 40));
+    taskCell.getText().getTextStyle().setFontSize(7).setForegroundColor('#333').setFontFamily('Google Sans');
+
+    // Status
+    const statusCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[1], y2, colWidths2[1], rh);
+    statusCell.getFill().setSolidFill(bgColor);
+    statusCell.getBorder().setTransparent();
+    statusCell.getText().setText(statusVal);
+    statusCell.getText().getTextStyle().setFontSize(7).setForegroundColor('#333').setFontFamily('Google Sans');
+
+    // Sprint markers
+    for (let c = 0; c < sprintHeaders.length; c++) {
+      const val = String(data[r][c + 3] || '').trim();
+      const markerCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, colXs2[c + 2], y2, colWidths2[c + 2], rh);
+      const mBg = val === '◆' ? '#C8E6C9' : val === '⏳' ? '#F3E5F5' : bgColor;
+      markerCell.getFill().setSolidFill(mBg);
+      markerCell.getBorder().setTransparent();
+      if (val) {
+        markerCell.getText().setText(val);
+        markerCell.getText().getTextStyle().setFontSize(8).setForegroundColor('#333').setFontFamily('Google Sans');
+        markerCell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+      }
+    }
+
+    y2 += rh;
+    rowCount++;
+  }
+}
+
+
+function buildFullYearTimelineSlide_(deck, ss) {
+  const slide = deck.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  slide.getBackground().setSolidFill('#FFFFFF');
+
+  addSlideHeader_(slide, 'Full Year Timeline (FY2027)');
+
+  const fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
+  if (!fytSheet) {
+    const noData = slide.insertTextBox('Full Year Timeline not created.\nRun Setup → Setup Timelines.', 40, 100, 640, 50);
+    noData.getText().getTextStyle().setFontSize(14).setForegroundColor('#999').setFontFamily('Google Sans');
+    return;
+  }
+
+  const data = fytSheet.getDataRange().getValues();
+  if (data.length < 6) return;
+
+  // Month headers: row 5 (index 4), cols C+ (index 2+)
+  const months = [];
+  for (let c = 2; c < data[4].length && c < 18; c++) {
+    const mStr = String(data[4][c] || '').trim();
+    if (mStr) months.push(mStr.replace(/ 20\d\d/, '').substring(0, 3));
+  }
+
+  // Layout: Category column + month columns
+  const catWidth = 140;
+  const statusWidth = 0; // Skip status column on slide
+  const monthWidth = Math.min(35, (680 - catWidth) / months.length);
+  const startX = 15;
+  let y3 = 80;
+  const rh3 = 16;
+
+  // Month header row
+  const monthHeaderCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y3, catWidth, rh3);
+  monthHeaderCell.getFill().setSolidFill('#E8EAED');
+  monthHeaderCell.getBorder().setTransparent();
+  monthHeaderCell.getText().setText('Category');
+  monthHeaderCell.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#333').setFontFamily('Google Sans');
+
+  months.forEach((m, i) => {
+    const cell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX + catWidth + i * monthWidth, y3, monthWidth, rh3);
+    cell.getFill().setSolidFill('#E8EAED');
+    cell.getBorder().setTransparent();
+    cell.getText().setText(m);
+    cell.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#333').setFontFamily('Google Sans');
+    cell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+  });
+  y3 += rh3;
+
+  // Data rows (start at row 7 = index 6)
+  let rowCount3 = 0;
+  for (let r = 6; r < data.length && rowCount3 < 24; r++) {
+    const label = String(data[r][0] || '').trim();
+    if (!label) continue;
+
+    const status = String(data[r][1] || '').trim();
+    const hasMarkers = data[r].slice(2).some(c => String(c).trim() !== '');
+
+    // Check if section header
+    if (!status && !hasMarkers && /^[^\w\s]/.test(label)) {
+      // Section header row
+      const totalWidth = catWidth + months.length * monthWidth;
+      const secCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y3, totalWidth, rh3);
+      secCell.getFill().setSolidFill('#333333');
+      secCell.getBorder().setTransparent();
+      secCell.getText().setText(label);
+      secCell.getText().getTextStyle().setFontSize(6).setBold(true).setForegroundColor('#FFFFFF').setFontFamily('Google Sans');
+      y3 += rh3;
+      rowCount3++;
+      continue;
+    }
+
+    // Data row
+    const isComplete = status === 'Complete';
+    const isBehind = status === 'Behind';
+    const bgColor3 = isComplete ? '#E8F5E9' : isBehind ? '#FFEBEE' : (rowCount3 % 2 === 0 ? '#FFFFFF' : '#FAFAFA');
+
+    // Label cell
+    const labelCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX, y3, catWidth, rh3);
+    labelCell.getFill().setSolidFill(bgColor3);
+    labelCell.getBorder().setTransparent();
+    labelCell.getText().setText(label.substring(0, 35));
+    const labelStyle = labelCell.getText().getTextStyle();
+    labelStyle.setFontSize(5).setFontFamily('Google Sans');
+    labelStyle.setForegroundColor(isComplete ? '#2E7D32' : isBehind ? '#B71C1C' : '#333333');
+
+    // Month markers
+    for (let c = 0; c < months.length; c++) {
+      const val = String(data[r][c + 2] || '').trim();
+      const mCell = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, startX + catWidth + c * monthWidth, y3, monthWidth, rh3);
+
+      let mBg = bgColor3;
+      if (val === '✅') mBg = '#C8E6C9';
+      else if (val === '⏳') mBg = '#F3E5F5';
+      else if (val === '🚨') mBg = '#FFCDD2';
+      else if (val && val !== '') mBg = '#E3F2FD';
+
+      mCell.getFill().setSolidFill(mBg);
+      mCell.getBorder().setTransparent();
+      if (val) {
+        // Show abbreviated marker
+        const displayVal = val.length > 4 ? val.substring(0, 3) : val;
+        mCell.getText().setText(displayVal);
+        mCell.getText().getTextStyle().setFontSize(5).setForegroundColor('#333').setFontFamily('Google Sans');
+        mCell.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+      }
+    }
+
+    y3 += rh3;
+    rowCount3++;
+  }
+}
+
+
+/**
+ * Adds a consistent header bar to the top of a slide.
+ */
+function addSlideHeader_(slide, title) {
+  // Gold accent bar
+  const bar = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, 0, 0, 720, 60);
+  bar.getFill().setSolidFill('#1a1a2e');
+  bar.getBorder().setTransparent();
+
+  const headerText = slide.insertTextBox(title, 30, 12, 660, 40);
+  headerText.getText().getTextStyle().setFontSize(22).setBold(true).setForegroundColor('#C9A227').setFontFamily('Google Sans');
 }
