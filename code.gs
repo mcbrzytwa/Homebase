@@ -158,8 +158,15 @@ function onOpen() {
     .addItem('🎯 Sync OKR Satellite Only', 'syncOKRSatelliteOnly')
     .addSeparator()
     .addSubMenu(ui.createMenu('📋 RACI & Trackers')
-      .addItem('📋 Refresh Master RACI', 'refreshMasterRACI')
-      .addItem('📤 Distribute Action Items from Internal Stakeholders', 'distributeFromInternalStakeholders'))
+      .addItem('📝 Process Notes → RACI Draft', 'processNotesToRACIDraft')
+      .addItem('📤 Push RACI → All Satellites', 'pushRACIToSatellites')
+      .addItem('🔄 Sync Satellite Statuses → RACI', 'syncSatelliteStatusesToRACI')
+      .addSeparator()
+      .addItem('📋 Refresh Master RACI (rebuild)', 'refreshMasterRACI')
+      .addItem('📤 Distribute Action Items from Internal Stakeholders', 'distributeFromInternalStakeholders')
+      .addSeparator()
+      .addItem('🗓️ View Milestone Staging', 'navToMilestoneStaging')
+      .addItem('🚀 Push Approved Milestones to Timelines', 'pushApprovedMilestones'))
     .addSeparator()
     .addSubMenu(ui.createMenu('📅 Timelines')
       .addItem('📅 View Full Year Timeline', 'navToFullYearTimeline')
@@ -3551,12 +3558,10 @@ function refreshNext4Weeks() {
 
 
 // ============================================================================
-// README — SYSTEM DOCUMENTATION
+// README — SYSTEM DOCUMENTATION (UPDATED)
+// Replace the existing createReadmeSheet_ function with this one.
 // ============================================================================
 
-/**
- * Creates or refreshes the README tab with system documentation and how-tos.
- */
 function createReadmeSheet_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CONFIG.sheets.readme);
@@ -3566,38 +3571,29 @@ function createReadmeSheet_(ss) {
     sheet = ss.insertSheet(CONFIG.sheets.readme);
   }
 
-  const gold = '#C9A227';
-  const darkBg = '#1a1a2e';
+  const gold    = '#C9A227';
+  const darkBg  = '#1a1a2e';
   const sectionBg = '#16213e';
-  const headerBg = '#0f3460';
+  const headerBg  = '#0f3460';
   const textColor = '#e0e0e0';
-  const white = '#FFFFFF';
+  const white   = '#FFFFFF';
 
-  // Set background for entire visible area
-  sheet.getRange(1, 1, 80, 6).setBackground(darkBg).setFontColor(textColor).setFontFamily('Arial');
+  sheet.getRange(1, 1, 120, 6).setBackground(darkBg).setFontColor(textColor).setFontFamily('Arial');
 
   let row = 1;
 
-  // ---- TITLE ----
-  sheet.getRange(row, 1, 1, 6).merge().setValue('📖 CCAT Operating System — README')
-    .setFontSize(20).setFontWeight('bold').setFontColor(gold).setHorizontalAlignment('center');
-  row += 2;
-
-  sheet.getRange(row, 1, 1, 6).merge()
-    .setValue('This document explains how the CCAT OS works and how to perform common operations.')
-    .setFontStyle('italic').setFontColor('#aaa').setHorizontalAlignment('center');
-  row += 2;
-
-  // ---- SECTION HELPER ----
+  // ── helpers ────────────────────────────────────────────────────────────────
   function addSection(title) {
-    sheet.getRange(row, 1, 1, 6).merge().setBackground(headerBg).setFontColor(gold)
+    sheet.getRange(row, 1, 1, 6).merge()
+      .setBackground(headerBg).setFontColor(gold)
       .setFontSize(14).setFontWeight('bold').setValue(title);
     row++;
   }
 
   function addSubSection(title) {
-    sheet.getRange(row, 1, 1, 6).merge().setBackground(sectionBg).setFontColor(white)
-      .setFontSize(12).setFontWeight('bold').setValue('  ' + title);
+    sheet.getRange(row, 1, 1, 6).merge()
+      .setBackground(sectionBg).setFontColor(white)
+      .setFontSize(11).setFontWeight('bold').setValue('  ' + title);
     row++;
   }
 
@@ -3608,141 +3604,352 @@ function createReadmeSheet_(ss) {
 
   function addBlank() { row++; }
 
-  // ---- SYSTEM OVERVIEW ----
-  addSection('🗺️ System Overview');
-  addLine('The CCAT OS is a hub-and-spoke project management system built in Google Sheets.');
-  addLine('It consists of a Master workbook (Home Base) and multiple Satellite workbooks — one per stakeholder.');
-  addLine('Data flows one way: Satellites → Master. The ED controls the master; stakeholders update their satellites.');
+  function addDivider() {
+    sheet.getRange(row, 1, 1, 6).merge()
+      .setBackground('#0D3B54').setValue('').setFontSize(2);
+    row++;
+  }
+
+  // ── TITLE ──────────────────────────────────────────────────────────────────
+  sheet.getRange(row, 1, 1, 6).merge()
+    .setValue('📖 CCAT Operating System — README')
+    .setFontSize(20).setFontWeight('bold').setFontColor(gold).setHorizontalAlignment('center');
+  row += 2;
+
+  sheet.getRange(row, 1, 1, 6).merge()
+    .setValue('How this system works and how to do everything in it. Last updated: ' + new Date().toLocaleDateString())
+    .setFontStyle('italic').setFontColor('#aaa').setHorizontalAlignment('center');
+  row += 3;
+
+
+  // ── ARCHITECTURE OVERVIEW ──────────────────────────────────────────────────
+  addSection('🗺️  System Architecture');
+  addLine('CCAT OS is a hub-and-spoke system. You work in the master spreadsheet (Home Base); stakeholders work in their own Satellite workbooks. Data flows in one direction: Satellites → Home Base.');
   addBlank();
-  addLine('Key components:');
-  addLine('  🏛️ Home Base — The master dashboard (this workbook)');
-  addLine('  📡 Satellites — Individual workbooks for each stakeholder check-in');
-  addLine('  ⏱️ Sprints — 2-week execution cycles (bi-weekly planning cadence)');
-  addLine('  🎯 OKRs — Objectives and Key Results for strategic tracking');
-  addLine('  📋 Master RACI — Aggregated action items from all satellites');
-  addLine('  📅 Timelines — Full Year Timeline + Next 6 Sprints planning view');
-  addLine('  📊 Sprint Deck — Auto-generated summary for stakeholder presentations');
-  addLine('  📝 Meeting Log — Calendar integration + Granola AI meeting notes');
+  addLine('Core concepts:');
+  addLine('  🏛️  Home Base  — Master control. The ED\'s workspace. Contains all tabs below.');
+  addLine('  📡  Satellites  — Individual Google Sheets shared with each stakeholder (Production, Curator, Internal Stakeholders, Advancement, ED, Director ML, Director MI, Technical Director). Each has a "Check-In" tab and a "📚 Sprint Archives" tab.');
+  addLine('  ⏱️  Sprints  — 2-week execution cycles. Sprint Rollover archives the old sprint and pushes the new one to all satellites, carrying over incomplete action items.');
+  addLine('  📋  Master RACI  — Your single view of all action items across every satellite. The primary place where you validate, assign, and track work.');
+  addLine('  📝  Granola / Meeting Notes  — Claude AI processes meeting transcripts. Action items land in Master RACI as [DRAFT] for your review; milestones land in Milestone Staging.');
+  addLine('  📅  Timelines  — Three views: Full Year (16-month milestone map), Next 6 Sprints (12-week action view), Next 4 Weeks (near-term detail).');
+  addLine('  📊  Sprint Deck  — Auto-generated Google Slides presentation rebuilt from live data each sprint.');
+  addBlank();
+  addDivider();
   addBlank();
 
-  // ---- HOW TO: LAUNCH A NEW SPRINT ----
-  addSection('⏱️ How To: Launch a New Sprint');
-  addLine('1. Go to menu: 🎛️ CCAT System → 🔄 New Sprint (Rollover & Push)');
-  addLine('2. The system will:');
-  addLine('   a. Archive the current sprint sheet');
-  addLine('   b. Create a new sprint sheet from the Sprint Template');
-  addLine('   c. Push the new sprint info to all satellite workbooks');
-  addLine('   d. Carry over incomplete action items from the previous sprint');
-  addLine('3. After rollover, update Sprint Planning (B4: name, B5: dates, B6: intent)');
-  addLine('4. Run "Fix Formula References" if check-in sheets show old sprint info');
+
+  // ── CORE WORKFLOW ──────────────────────────────────────────────────────────
+  addSection('🔄  Core Weekly Workflow');
+  addLine('1.  Hold meetings → copy Granola transcript');
+  addLine('2.  Run  📝 Process Notes → RACI Draft  — action items appear in Master RACI as [DRAFT]; milestones appear in Milestone Staging');
+  addLine('3.  Review Master RACI — edit owners, delete anything wrong, change [DRAFT] status to "Not Started" to approve');
+  addLine('4.  Run  📤 Push RACI → All Satellites  — approved items are written to each stakeholder\'s satellite tracker');
+  addLine('5.  Stakeholders update their status / add new items in their satellite');
+  addLine('6.  Run  🔄 Sync Satellite Statuses → RACI  — pulls status updates back to Master RACI without wiping your data');
+  addLine('7.  For milestones: open 📋 Milestone Staging, set Timeline Target column (4-Week / 6-Sprint / Year), set Status to "Approved", then run  🚀 Push Approved Milestones');
+  addLine('8.  Every 2 weeks: run  🔄 New Sprint (Rollover & Push)  to start a new sprint');
+  addBlank();
+  addDivider();
   addBlank();
 
-  // ---- HOW TO: SYNC SATELLITES ----
-  addSection('🔁 How To: Sync Satellites');
-  addLine('1. Go to menu: 🎛️ CCAT System → 🔁 Sync All Satellites → Master');
-  addLine('2. This pulls action items from each satellite into the Master RACI Tracker');
-  addLine('3. To sync just OKRs: 🎛️ CCAT System → 🎯 Sync OKR Satellite Only');
-  addLine('4. Syncs are one-way: Satellite → Master (stakeholders never see master edits)');
+
+  // ── RACI WORKFLOW IN DETAIL ────────────────────────────────────────────────
+  addSection('📋  RACI & Trackers — Detailed Guide');
+
+  addSubSection('Step 1 — Process Notes → RACI Draft');
+  addLine('Menu: 🎛️ CCAT System → 📋 RACI & Trackers → 📝 Process Notes → RACI Draft');
+  addLine('1. Choose which satellite meeting the notes are from');
+  addLine('2. Paste the Granola transcript');
+  addLine('3. Claude extracts action items, decision follow-ups, and milestones');
+  addLine('4. Action items land in Master RACI highlighted yellow with status "[DRAFT — Validate]"');
+  addLine('5. Milestones land in the 📋 Milestone Staging sheet');
   addBlank();
 
-  // ---- HOW TO: PROCESS MEETING NOTES ----
-  addSection('📝 How To: Process Meeting Notes (Granola)');
-  addLine('1. After a meeting, copy the Granola transcript');
-  addLine('2. Go to: 🎛️ CCAT System → 📝 Meeting Notes → 📥 Process Granola Notes');
-  addLine('3. Paste the transcript when prompted');
-  addLine('4. The system uses Claude AI to extract action items and route them to the correct satellite');
-  addLine('5. To sync calendar events to the Meeting Log: use "Sync Meeting Log from Calendar"');
+  addSubSection('Step 2 — Validate in Master RACI');
+  addLine('Open the "📋 Master RACI Tracker" tab (Sheets menu → Master RACI Tracker)');
+  addLine('• Yellow rows = [DRAFT], not yet pushed to anyone');
+  addLine('• Edit the Owner column — the function/department is auto-shown in parentheses');
+  addLine('• Delete any rows that shouldn\'t be pushed');
+  addLine('• Change Status from "[DRAFT — Validate]" to "Not Started" to approve a row');
+  addLine('• The 📊 checkbox in column C flags an item to appear in the Sprint Deck');
   addBlank();
 
-  // ---- HOW TO: DISTRIBUTE ACTION ITEMS ----
-  addSection('📤 How To: Distribute Action Items');
-  addLine('1. After an Internal Stakeholders meeting, update that check-in sheet with action items');
-  addLine('2. Go to: 🎛️ CCAT System → 📋 RACI & Trackers → 📤 Distribute from IS');
-  addLine('3. The system matches action item owners to their satellite and pushes items there');
-  addLine('4. Owner names are matched using the satellite config (e.g., "Richard" → Production)');
+  addSubSection('Step 3 — Push RACI → All Satellites');
+  addLine('Menu: 🎛️ CCAT System → 📋 RACI & Trackers → 📤 Push RACI → All Satellites');
+  addLine('• Pushes every approved row (status ≠ [DRAFT]) to the correct satellite\'s Action Items section');
+  addLine('• Matches by satellite name in the Source column');
+  addLine('• Skips duplicates — if the task already exists in that satellite it won\'t be added twice');
   addBlank();
 
-  // ---- HOW TO: GENERATE SPRINT DECK ----
-  addSection('📊 How To: Generate Sprint Deck');
-  addLine('Option A — Google Slides Deck (Recommended):');
-  addLine('  1. Go to: 🎛️ CCAT System → 📊 Sprint Deck → 🎬 Generate Sprint Deck (Google Slides)');
-  addLine('  2. A wizard walks you through: milestones achieved, what\'s next, communications, risks');
-  addLine('  3. The deck is generated at a stable URL (same link every sprint)');
-  addLine('  4. The previous deck is archived as a copy before rebuilding');
-  addLine('  5. The deck is also offered at the end of Sprint Rollover');
-  addLine('Option B — Spreadsheet Data:');
-  addLine('  1. Go to: 🎛️ CCAT System → 📊 Sprint Deck → 📊 Generate Sprint Deck Data (Sheet)');
-  addLine('  2. This creates a summary sheet for manual embedding in Google Slides');
-  addLine('3. To email a summary: 📊 Sprint Deck → 📧 Send Sprint Summary Email');
+  addSubSection('Step 4 — Stakeholders Update Their Satellites');
+  addLine('Stakeholders open their satellite workbook (same link every sprint — URL never changes)');
+  addLine('• They can update Status: Not Started / In Progress / Complete / Blocked');
+  addLine('• They can add new action items in the Action Items section');
+  addLine('• They edit their RACI section (columns B–E). Selecting a name appends to the cell — multi-select is supported');
+  addLine('• Due Date column accepts "This Sprint", "Next Sprint", "2 Sprints Out" etc. — auto-converts to real dates every 5 min');
   addBlank();
 
-  // ---- HOW TO: UPDATE TIMELINES ----
-  addSection('📅 How To: Update Timelines');
-  addLine('Full Year Timeline:');
-  addLine('  - Shows milestones across 16 months (Mar 2026 – Jun 2027)');
-  addLine('  - To refresh: 🎛️ CCAT System → 📅 Timelines → 🔄 Refresh Full Year Timeline');
-  addLine('  - Milestones with ⏳ have TBD dates; bulls-eye markers (🎯) show confirmed dates');
-  addBlank();
-  addLine('Next 6 Sprints:');
-  addLine('  - Shows action items mapped across the next 6 sprint cycles (12 weeks)');
-  addLine('  - Auto-pulls due-dated items from all satellite trackers');
-  addLine('  - To refresh: 🎛️ CCAT System → 📅 Timelines → 🔄 Refresh Next 6 Sprints');
-  addLine('  - Includes a "Manual Entries" section at the bottom for ad-hoc items');
+  addSubSection('Step 5 — Sync Satellite Statuses → RACI (Non-Destructive)');
+  addLine('Menu: 🎛️ CCAT System → 📋 RACI & Trackers → 🔄 Sync Satellite Statuses → RACI');
+  addLine('• Matches each satellite\'s action items to existing RACI rows by task text');
+  addLine('• Updates the Status and Last Updated columns only — your edits to Owner, Due Date, etc. are preserved');
+  addLine('• [DRAFT] rows are never touched by this sync');
+  addLine('• New items found in satellites (that aren\'t in RACI yet) are appended in blue');
+  addLine('• This is the safe, routine sync. "Refresh Master RACI (rebuild)" is a nuclear option — it wipes and rebuilds the whole sheet');
   addBlank();
 
-  // ---- HOW TO: ADD A NEW SATELLITE ----
-  addSection('📡 How To: Add a New Satellite Check-In');
-  addLine('1. Open the script editor (Extensions → Apps Script)');
-  addLine('2. In CONFIG.checkIns, add a new entry:');
-  addLine('   { name: "New Name", activeSheet: "New Name Check-In",');
-  addLine('     title: "CCAT New Name Check-In", type: "checkin",');
-  addLine('     owner: "Person Name", preserveLink: false }');
-  addLine('3. Save the script, then run: 🎛️ CCAT System → ⚙️ Setup → 🚀 Initial Setup');
-  addLine('4. The system will create a new satellite workbook and check-in sheet automatically');
-  addLine('5. Share the new satellite workbook with the stakeholder');
+  addSubSection('Distribute Action Items from Internal Stakeholders');
+  addLine('Menu: 🎛️ CCAT System → 📋 RACI & Trackers → 📤 Distribute Action Items from IS');
+  addLine('• After an Internal Stakeholders meeting, reads all action items from the IS satellite');
+  addLine('• Matches the Owner name to the correct satellite (e.g. "Richard" → Production, "Lumi" → Curator)');
+  addLine('• Pushes those items directly to the target satellite — bypasses the RACI validation step');
+  addLine('• Use this for quick distribution after the IS weekly meeting');
+  addBlank();
+  addDivider();
   addBlank();
 
-  // ---- HOW TO: SEND MEETING SUMMARIES ----
-  addSection('📧 How To: Send Meeting Summaries');
-  addLine('1. Go to: 🎛️ CCAT System → 📧 Communication → 📧 Send Meeting Summary');
-  addLine('2. This sends an email to meeting participants with the summary + satellite tracker link');
-  addLine('3. Make sure your email is configured in: ⚙️ Setup → 📝 Update Config Email');
+
+  // ── MILESTONES & TIMELINES ─────────────────────────────────────────────────
+  addSection('📅  Milestone Staging & Timelines — Detailed Guide');
+
+  addSubSection('Milestone Staging Sheet');
+  addLine('Any time you run "Process Notes → RACI Draft", milestones mentioned in the meeting are extracted and placed here with status "Pending Review".');
+  addLine('Columns:');
+  addLine('  Milestone  — what was discussed');
+  addLine('  Date  — Claude\'s best estimate. Edit if wrong.');
+  addLine('  Is TBD  — Yes if no firm date was given');
+  addLine('  Category  — Hiring / Budget / Building / Events / Curation / Communications / Academic / Other');
+  addLine('  Owner  — who\'s responsible');
+  addLine('  Source Meeting  — which satellite check-in this came from');
+  addLine('  Timeline Target  — YOU fill this in: 4-Week, 6-Sprint, Year, or Skip');
+  addLine('  Status  — set to "Approved" when ready to push; becomes "Pushed" automatically');
+  addLine('  Notes  — context from the meeting');
   addBlank();
 
-  // ---- ARCHITECTURE NOTES ----
-  addSection('🏗️ Architecture Notes');
-  addLine('Satellites:');
-  addLine('  - Each satellite has a "Check-In" sheet (current sprint) + "📚 Sprint Archives"');
-  addLine('  - Satellite IDs and URLs are stored in the ⚙️ Satellite Config tab');
-  addLine('  - preserveLink: true means the satellite existed before v2 and keeps its original ID');
-  addBlank();
-  addLine('Sprint lifecycle:');
-  addLine('  - Sprint Planning (B4–B6) defines the current sprint name, dates, and intent');
-  addLine('  - "New Sprint" archives the current sprint and creates a new one from the template');
-  addLine('  - Each sprint sheet records action items, status, and owner across all categories');
-  addBlank();
-  addLine('Meeting intelligence:');
-  addLine('  - Granola AI transcripts are parsed by Claude to extract structured action items');
-  addLine('  - Items are auto-routed to the correct satellite based on keyword matching');
-  addLine('  - Calendar sync pulls CCAT-related events into the Meeting Log');
+  addSubSection('Pushing Milestones to Timelines');
+  addLine('1. Open 📋 Milestone Staging (Sheets menu, or RACI & Trackers → View Milestone Staging)');
+  addLine('2. Review each row. Edit Milestone text, Date, Category as needed');
+  addLine('3. Set the Timeline Target dropdown: 4-Week / 6-Sprint / Year');
+  addLine('4. Change Status to "Approved"');
+  addLine('5. Run: 🎛️ CCAT System → 📋 RACI & Trackers → 🚀 Push Approved Milestones to Timelines');
+  addLine('6. Pushed rows turn green. The milestone appears in the timeline\'s Manual Entries section.');
   addBlank();
 
-  // ---- QUICK REFERENCE ----
-  addSection('⚡ Quick Reference');
-  addLine('New sprint:          🎛️ CCAT System → 🔄 New Sprint');
-  addLine('Sync satellites:     🎛️ CCAT System → 🔁 Sync All Satellites');
-  addLine('Process notes:       🎛️ CCAT System → 📝 Meeting Notes → 📥 Process Granola Notes');
-  addLine('Refresh RACI:        🎛️ CCAT System → 📋 RACI & Trackers → 📋 Refresh Master RACI');
-  addLine('Sprint deck:         🎛️ CCAT System → 📊 Sprint Deck → 📊 Generate');
-  addLine('Refresh timelines:   🎛️ CCAT System → 📅 Timelines → 🔄 Refresh');
-  addLine('View all satellites:  📑 Sheets → ⚙️ Satellite Config');
+  addSubSection('Three Timeline Views');
+  addLine('📅 Full Year Timeline — 16-month milestone map (Mar 2026 – Jun 2027). Pre-populated with hiring, budget, facilities, events, curation, comms, and academic milestones. Items with ⏳ have TBD dates; 🎯 = confirmed. The Status column (Complete / Behind) persists across refreshes. The 📊 checkbox flags an item for the Sprint Deck.');
+  addLine('  → Refresh: 🎛️ CCAT System → 📅 Timelines → 🔄 Refresh Full Year Timeline');
+  addBlank();
+  addLine('📅 Next 6 Sprints — Sprint-by-sprint planning view (12 weeks). Auto-pulls action items from all check-in tabs that have due dates within the window. Has a Manual Entries section at the bottom for ad-hoc items. The 📊 checkbox filters which items appear in the Sprint Deck.');
+  addLine('  → Refresh: 🎛️ CCAT System → 📅 Timelines → 🔄 Refresh Next 6 Sprints');
+  addBlank();
+  addLine('📅 Next 4 Weeks — Week-by-week detail. Pulls milestones from the Full Year Timeline AND action items from all check-in tabs that fall within 4 weeks. Has a Manual Entries section.');
+  addLine('  → Refresh: 🎛️ CCAT System → 📅 Timelines → 🔄 Refresh Next 4 Weeks');
+  addBlank();
+  addLine('📅 Timeline Change Log — Automatic log of every timeline modification made by the system (from Granola processing). View via: 🎛️ CCAT System → 📅 Timelines → 📋 View Timeline Change Log');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── SPRINT MANAGEMENT ─────────────────────────────────────────────────────
+  addSection('⏱️  Sprint Management');
+
+  addSubSection('Launching a New Sprint');
+  addLine('Menu: 🎛️ CCAT System → 🔄 New Sprint (Rollover & Push)');
+  addLine('1. You\'ll be prompted for the new sprint dates and intent');
+  addLine('2. The system archives satellite tracker snapshots (saved to 📚 Satellite Tracker Archive)');
+  addLine('3. Current sprint sheet is renamed and hidden');
+  addLine('4. New sprint sheet is created from the Sprint Template');
+  addLine('5. Sprint Planning tab (B4–B6) is updated');
+  addLine('6. All check-in tabs in Home Base are updated with the new sprint info');
+  addLine('7. All satellites are pushed: new sprint header + carried-over incomplete action items (marked ⏳ [Carried Over])');
+  addLine('8. Archives are synced to all satellite workbooks');
+  addLine('9. You\'re offered to generate the Sprint Deck immediately');
+  addBlank();
+
+  addSubSection('Carryover Logic');
+  addLine('Incomplete action items (any status that is not "Complete", "Done", or "Completed") are automatically carried forward into the new sprint, marked with ⏳ [Carried Over] and status set to "Carried Over". Completed items are archived and do not carry over.');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── MEETING NOTES (GRANOLA) ───────────────────────────────────────────────
+  addSection('📝  Meeting Notes (Granola)');
+  addLine('CCAT OS uses Claude AI to extract structured data from Granola meeting transcripts. There are two entry points:');
+  addBlank();
+  addLine('① Process Notes → RACI Draft  (new, recommended)');
+  addLine('   Menu: 🎛️ CCAT System → 📋 RACI & Trackers → 📝 Process Notes → RACI Draft');
+  addLine('   Action items → Master RACI as [DRAFT]  |  Milestones → Milestone Staging');
+  addLine('   Nothing is pushed to any satellite until you validate and run the push step.');
+  addBlank();
+  addLine('② Process Granola Notes for Satellite  (legacy, direct push)');
+  addLine('   Menu: 🎛️ CCAT System → 📝 Meeting Notes → 📥 Process Granola Notes for Satellite');
+  addLine('   Extracts action items and writes them directly to the satellite check-in tab, then refreshes Master RACI. Skips the RACI validation step. Useful for quick single-satellite updates.');
+  addBlank();
+  addLine('Calendar Sync:');
+  addLine('   Menu: 🎛️ CCAT System → 📝 Meeting Notes → 🔄 Sync Meeting Log from Calendar');
+  addLine('   Pulls CCAT-related calendar events (last 30 days / next 30 days) into the 📝 Meeting Log tab. Detects satellite from event title keywords. Links to Granola notes if found in event description.');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── SPRINT DECK ───────────────────────────────────────────────────────────
+  addSection('📊  Sprint Deck');
+  addLine('The Sprint Deck is a Google Slides presentation generated from live data. It uses the same URL every sprint — the previous deck is archived as a copy before rebuilding.');
+  addBlank();
+  addLine('Generating the deck:');
+  addLine('   Menu: 🎛️ CCAT System → 📊 Sprint Deck → 🎬 Generate Sprint Deck (Google Slides)');
+  addLine('   A 4-step wizard walks you through:');
+  addLine('     Step 1: Milestones achieved — pre-checked from Full Year Timeline + completed RACI items');
+  addLine('     Step 2: What\'s next — priorities for the upcoming sprint');
+  addLine('     Step 3: Communications & risks — key messages and blockers');
+  addLine('     Step 4: Review & generate — lists all slides to be created');
+  addBlank();
+  addLine('Slides generated:');
+  addLine('   1. Title slide  2. Sprint intent + OKR velocity  3. Milestones achieved  4. Sprint priorities');
+  addLine('   5. Communications & risks  6. Next 6 Sprints table  7. Full Year Timeline table  8. Looking Ahead (quarter summary)');
+  addBlank();
+  addLine('Controlling what appears in the deck:');
+  addLine('   • In Master RACI: check the 📊 column (col C) to include an action item');
+  addLine('   • In Full Year Timeline: check the 📊 column (col B) to include a milestone');
+  addLine('   • In Next 6 Sprints: check the 📊 column (col B) to include a sprint item');
+  addLine('   • If NO items are flagged, all items appear. If ANY are flagged, only flagged items appear.');
+  addBlank();
+  addLine('Other options:');
+  addLine('   📊 Generate Sprint Deck Data (Sheet)  — creates a 📊 Sprint Deck Data tab for manual embedding in Slides');
+  addLine('   📧 Send Sprint Summary Email  — emails a status summary to your configured notification address');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── COMMUNICATION ─────────────────────────────────────────────────────────
+  addSection('📧  Communication');
+  addLine('After processing Granola notes, the system stores the last meeting\'s satellite, participants, and summary.');
+  addLine('Menu: 🎛️ CCAT System → 📧 Communication → 📧 Send Meeting Summary to Participants');
+  addLine('• Sends an email to all participants with the summary, decisions, action items, and a link to their satellite workbook');
+  addLine('• Only works after running "Process Granola Notes for Satellite" (the legacy path stores participants)');
+  addLine('• For the new Process Notes → RACI Draft path, participants are not collected yet — add this manually in a future update');
+  addBlank();
+  addLine('Update your notification email: 🎛️ CCAT System → 📧 Communication → 📝 Update Config Email');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── SATELLITES ────────────────────────────────────────────────────────────
+  addSection('📡  Satellite Workbooks');
+  addLine('Each satellite is a separate Google Spreadsheet. The URL never changes — reformatting and rollover preserve the same ID.');
+  addBlank();
+  addLine('Current satellites:');
+  addLine('  🎛️ Production  — Richard Lonsdorf');
+  addLine('  🎨 Curator  — Lumi Tan');
+  addLine('  👥 Internal Stakeholders  — All Directors');
+  addLine('  📈 Advancement  — Katie');
+  addLine('  👔 ED  — maryclarebrzytwa');
+  addLine('  🎬 Director ML  — TBD');
+  addLine('  🖥️ Director MI  — TBD');
+  addLine('  🔧 Technical Director  — TBD');
+  addLine('  🎯 OKRs  — Read-only view (push only, no stakeholder edits)');
+  addBlank();
+  addLine('Each Check-In satellite has these sections (in order):');
+  addLine('  Row 1–5: Sprint header (synced from master — read only)');
+  addLine('  Meeting Outcomes: what must be true when the meeting ends');
+  addLine('  Agenda: Topic | Owner | Prep/Notes | Link | Priority');
+  addLine('  Decisions: Decision | Owner | Impact | Follow-up | Link');
+  addLine('  Action Items: Task | Owner | Due Date | Status | Link | Satellite Source');
+  addLine('  RACI: Role | Responsible | Accountable | Consulted | Informed');
+  addLine('  Parking Lot: Item | Owner | Notes | Link');
+  addLine('  📚 Sprint Archives tab: read-only archive of previous sprint data');
+  addBlank();
+  addLine('Opening a satellite: 📡 Satellites menu → select the satellite name');
+  addLine('Viewing all satellite links: 📑 Sheets → ⚙️ Satellite Config');
+  addBlank();
+  addLine('Reformatting existing satellites to v2 layout (preserves URL):');
+  addLine('  Menu: 🎛️ CCAT System → ⚙️ Setup → 🔄 Reformat Existing Satellites to v2');
+  addBlank();
+  addLine('Adding a new satellite:');
+  addLine('  1. In the script editor, add an entry to CONFIG.checkIns');
+  addLine('  2. Set: name, activeSheet, title, type: "checkin", owner, preserveLink: false');
+  addLine('  3. Run: 🎛️ CCAT System → ⚙️ Setup → 🚀 Initial Setup');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── ARCHIVES ──────────────────────────────────────────────────────────────
+  addSection('🗄️  Archives');
+  addLine('📅 Sprint Archives  — Sprint sheets are renamed and hidden during rollover. View them via 🎛️ CCAT System → 🗄️ Archives → 📅 View Archived Sprints.');
+  addBlank();
+  addLine('📚 Satellite Tracker Archive  — A snapshot of every satellite\'s action items, decisions, and agenda is taken before each sprint rollover. Stored in the "📚 Satellite Tracker Archive" tab in Home Base, and also synced to each satellite\'s "📚 Sprint Archives" tab.');
+  addLine('  View: 🎛️ CCAT System → 🗄️ Archives → 📋 View Satellite Tracker Archive  (filterable by sprint or satellite)');
+  addLine('  Push to satellites: 🎛️ CCAT System → 🗄️ Archives → 📚 Push Archives to Satellites');
+  addBlank();
+  addLine('📊 Generate Archive Report  — Creates a sprint timeline summary sheet: 🎛️ CCAT System → 🗄️ Archives → 📊 Generate Archive Report');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── OKRs ──────────────────────────────────────────────────────────────────
+  addSection('🎯  OKRs');
+  addLine('The OKR tab ("🎯 Objectives and Key Results") is managed manually by the ED. The system does not auto-populate it from meeting notes.');
+  addLine('OKR columns used by the system: Type (A), Description (B), Priority (P), Planning Assumption (Q), Status (R), Confidence (S), Fixed Deadline (T), Category (U), Dependencies (Z).');
+  addLine('Status options: Not Started / In Progress / Complete / Blocked');
+  addLine('Priority options: P0 (Critical), P1 (High), P2 (Medium), P3 (Low)');
+  addLine('Planning Assumption: which quarter(s) this OKR spans (Q1–Q4 or combinations)');
+  addBlank();
+  addLine('OKR Satellite (read-only):');
+  addLine('  The OKR tab is pushed to a read-only satellite workbook. Stakeholders can view but not edit.');
+  addLine('  Sync: 🎛️ CCAT System → 🎯 Sync OKR Satellite Only');
+  addBlank();
+  addLine('OKR data feeds into: Sprint Deck (velocity / status slides), Sprint Deck Data sheet, generateSprintDeckData function.');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── AUTOMATION TRIGGERS ───────────────────────────────────────────────────
+  addSection('⚙️  Automation Triggers');
+  addLine('Sprint-relative due date conversion:');
+  addLine('  Satellite Action Items support "This Sprint", "Next Sprint", etc. in the Due Date column. A trigger converts these to real dates (2nd Thursday of the target sprint) every 5 minutes.');
+  addLine('  Enable: 🎛️ CCAT System → ⚙️ Setup → ⏱️ Enable Auto Due-Date Conversion');
+  addLine('  Disable: 🎛️ CCAT System → ⚙️ Setup → ❌ Disable Auto Due-Date Conversion');
+  addBlank();
+  addLine('RACI multi-select (satellites):');
+  addLine('  Because Home Base\'s onEdit trigger can\'t fire on satellite edits, the same 5-minute trigger also handles RACI appending. If a stakeholder picks a name from the dropdown, it appends to the existing comma-separated value instead of replacing it.');
+  addBlank();
+  addLine('Hourly satellite sync (optional):');
+  addLine('  You can set up an hourly trigger that runs "Sync All Satellites → Master" automatically.');
+  addLine('  Enable: in the script editor, run createHourlySyncTrigger()');
+  addLine('  Disable: run removeHourlySyncTrigger()');
+  addBlank();
+  addDivider();
+  addBlank();
+
+
+  // ── QUICK REFERENCE ───────────────────────────────────────────────────────
+  addSection('⚡  Quick Reference — Common Tasks');
+  addLine('Process meeting notes (new workflow): RACI & Trackers → 📝 Process Notes → RACI Draft');
+  addLine('Push RACI to satellites:             RACI & Trackers → 📤 Push RACI → All Satellites');
+  addLine('Pull satellite statuses back:         RACI & Trackers → 🔄 Sync Satellite Statuses → RACI');
+  addLine('Push milestones to timelines:         RACI & Trackers → 🚀 Push Approved Milestones');
+  addLine('Start a new sprint:                   🔄 New Sprint (Rollover & Push)');
+  addLine('Generate sprint deck:                 Sprint Deck → 🎬 Generate Sprint Deck (Google Slides)');
+  addLine('Refresh a timeline:                   Timelines → 🔄 Refresh [timeline name]');
+  addLine('Open a satellite:                     📡 Satellites → [satellite name]');
+  addLine('View satellite tracker archive:       Archives → 📋 View Satellite Tracker Archive');
+  addLine('Sync OKR satellite:                   🎯 Sync OKR Satellite Only');
+  addLine('Reformat satellites to v2:            Setup → 🔄 Reformat Existing Satellites to v2');
+  addLine('Fix check-in sprint headers:          Setup → 🔧 Fix Formula References');
   addBlank();
 
   // Format
-  sheet.setColumnWidth(1, 900);
-  for (let c = 2; c <= 6; c++) {
-    sheet.setColumnWidth(c, 10);
-  }
+  sheet.setColumnWidth(1, 950);
+  for (let c = 2; c <= 6; c++) sheet.setColumnWidth(c, 5);
   sheet.setFrozenRows(1);
 
   return sheet;
@@ -6346,4 +6553,943 @@ function buildFullYearTimelineSlide_(deck, ss) {
   });
 
   addCalArtsBranding_(slide);
+}
+// ============================================================================
+// RACI WORKFLOW ADDON — Paste at the bottom of code.gs
+// ============================================================================
+//
+// NEW FLOW:
+//   1. Process Notes → RACI Draft
+//      Granola notes → Claude → action items land in Master RACI as [DRAFT]
+//      Milestones land in a separate "📋 Milestone Staging" sheet
+//
+//   2. You validate in Master RACI: edit owner, change [DRAFT] to blank or delete rows
+//
+//   3. Push RACI → Satellites
+//      Reads all RACI rows where Source column = a known satellite name and
+//      status is NOT [DRAFT] — pushes each item to that satellite's Action Items
+//
+//   4. Satellites update their status / add new items
+//
+//   5. Sync Satellite Statuses → RACI (non-destructive)
+//      Matches existing RACI rows by task text, updates STATUS column only.
+//      Does NOT rebuild or wipe the RACI (unlike the old refreshMasterRACI)
+//
+//   6. Milestone Staging → tag each item 4-Week / 6-Sprint / Year  → push
+//
+// INSTALL:
+//   a) Paste this entire file at the bottom of code.gs
+//   b) In onOpen(), replace the existing RACI & Trackers submenu block with:
+//
+//     .addSubMenu(ui.createMenu('📋 RACI & Trackers')
+//       .addItem('📝 Process Notes → RACI Draft', 'processNotesToRACIDraft')
+//       .addItem('📤 Push RACI → All Satellites', 'pushRACIToSatellites')
+//       .addItem('🔄 Sync Satellite Statuses → RACI', 'syncSatelliteStatusesToRACI')
+//       .addSeparator()
+//       .addItem('📋 Refresh Master RACI (rebuild)', 'refreshMasterRACI')
+//       .addItem('📤 Distribute Action Items from Internal Stakeholders', 'distributeFromInternalStakeholders')
+//       .addSeparator()
+//       .addItem('🗓️ View Milestone Staging', 'navToMilestoneStaging')
+//       .addItem('🚀 Push Approved Milestones to Timelines', 'pushApprovedMilestones'))
+//
+// ============================================================================
+
+var MILESTONE_STAGING_SHEET = '📋 Milestone Staging';
+
+// Column positions in Master RACI (1-indexed, matching createMasterRACISheet_)
+// A=Satellite Source, B=Task, C=📊, D=Owner, E=Due Date, F=Status, G=Priority,
+// H=Sprint, I=Decision Context, J=Last Updated
+var RACI_COL = {
+  source:   1,
+  task:     2,
+  deck:     3,
+  owner:    4,
+  dueDate:  5,
+  status:   6,
+  priority: 7,
+  sprint:   8,
+  context:  9,
+  updated:  10
+};
+
+// Status value used to flag unvalidated rows
+var DRAFT_STATUS = '[DRAFT — Validate]';
+
+
+// ============================================================================
+// STEP 1: Process Notes → Master RACI (Draft) + Milestone Staging
+// ============================================================================
+
+function processNotesToRACIDraft() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const checkInNames = CONFIG.checkIns
+    .filter(c => c.type === 'checkin')
+    .map(c => c.name + ' (' + c.owner + ')');
+
+  const html = buildProcessNotesDialog_(checkInNames);
+  const htmlOutput = HtmlService.createHtmlOutput(html).setWidth(620).setHeight(520);
+  ui.showModalDialog(htmlOutput, '📝 Process Notes → RACI Draft');
+}
+
+
+function buildProcessNotesDialog_(checkInNames) {
+  let optionsHtml = checkInNames.map(n =>
+    `<option value="${n.split(' (')[0]}">${n}</option>`
+  ).join('');
+
+  return `<!DOCTYPE html><html><head>
+<style>
+  body { font-family: Arial, sans-serif; padding: 16px; font-size: 13px; }
+  label { font-weight: bold; display: block; margin-top: 12px; }
+  select, textarea, input { width: 100%; padding: 8px; border: 1px solid #ddd;
+    border-radius: 4px; margin: 6px 0; box-sizing: border-box; }
+  textarea { height: 180px; font-family: monospace; font-size: 11px; }
+  .hint { color: #888; font-size: 11px; margin: 0 0 6px 0; }
+  button { background: #1a73e8; color: white; border: none; padding: 10px 20px;
+    border-radius: 4px; cursor: pointer; font-size: 13px; width: 100%; margin-top: 12px; }
+  button:hover { background: #1557b0; }
+  button:disabled { background: #aaa; cursor: default; }
+</style></head><body>
+  <label>Which satellite meeting?</label>
+  <select id="satellite">${optionsHtml}</select>
+
+  <label>Paste Granola / meeting notes:</label>
+  <p class="hint">Claude will extract action items → Master RACI (as DRAFT) and milestones → Milestone Staging.</p>
+  <textarea id="notes" placeholder="Paste the full meeting transcript or notes here…"></textarea>
+
+  <button id="btn" onclick="submit()">📥 Process Notes → RACI Draft</button>
+
+<script>
+function submit() {
+  const satellite = document.getElementById('satellite').value;
+  const notes = document.getElementById('notes').value.trim();
+  if (!notes) { alert('Please paste meeting notes first.'); return; }
+  const btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Processing with Claude… (30-60 sec)';
+  google.script.run
+    .withSuccessHandler(msg => { alert(msg); google.script.host.close(); })
+    .withFailureHandler(err => {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = '📥 Process Notes → RACI Draft';
+    })
+    .processNotesToRACIDraftServer(satellite, notes);
+}
+</script></body></html>`;
+}
+
+
+/**
+ * Server-side handler called by the dialog.
+ * Extracts action items + milestones via Claude, writes drafts to Master RACI
+ * and Milestone Staging. Does NOT touch any satellite or check-in sheet.
+ */
+function processNotesToRACIDraftServer(satelliteName, granolaText) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY') || CONFIG.claudeApiKey;
+  if (!apiKey) throw new Error('CLAUDE_API_KEY not configured in Script Properties.');
+
+  const checkIn = CONFIG.checkIns.find(c => c.name === satelliteName || c.legacyName === satelliteName);
+  if (!checkIn) throw new Error('Satellite "' + satelliteName + '" not found in CONFIG.');
+
+  // ── Call Claude ────────────────────────────────────────────────────────────
+  const extracted = extractMeetingDataForRACI_(apiKey, granolaText, satelliteName, checkIn.owner);
+  if (!extracted || extracted.error) throw new Error(extracted ? extracted.error : 'Claude extraction failed.');
+
+  const sprintInfo = getCurrentSprintInfo_(ss);
+
+  // ── Write action items to Master RACI as DRAFT ─────────────────────────────
+  let raciSheet = ss.getSheetByName(CONFIG.sheets.masterRaci);
+  if (!raciSheet) {
+    createMasterRACISheet_();
+    raciSheet = ss.getSheetByName(CONFIG.sheets.masterRaci);
+  }
+
+  const actionItems = extracted.actionItems || [];
+  const decisions   = extracted.decisions || [];
+  const now = new Date();
+
+  // Append action items
+  actionItems.forEach(item => {
+    const owner = item.owner || '';
+    const fn    = inferFunction_(owner);
+    raciSheet.appendRow([
+      satelliteName,                         // A: Source
+      item.task || '',                       // B: Task
+      false,                                 // C: 📊 Deck (unchecked)
+      owner + (fn ? ' (' + fn + ')' : ''),  // D: Owner + Function
+      item.dueDate || '',                    // E: Due Date
+      DRAFT_STATUS,                          // F: Status — marks as unvalidated
+      item.priority || '',                   // G: Priority
+      sprintInfo.name,                       // H: Sprint
+      '',                                    // I: Context
+      now                                    // J: Last Updated
+    ]);
+  });
+
+  // Append decisions that have follow-ups
+  decisions.forEach(d => {
+    if (!d.followUp) return;
+    const owner = d.owner || '';
+    const fn    = inferFunction_(owner);
+    raciSheet.appendRow([
+      satelliteName,
+      '↳ Follow-up: ' + d.followUp,
+      false,
+      owner + (fn ? ' (' + fn + ')' : ''),
+      '',
+      DRAFT_STATUS,
+      '',
+      sprintInfo.name,
+      'Decision: ' + (d.decision || ''),
+      now
+    ]);
+  });
+
+  // Apply DRAFT highlight to new rows
+  const lastRow  = raciSheet.getLastRow();
+  const newRows  = actionItems.length + decisions.filter(d => d.followUp).length;
+  const firstNew = lastRow - newRows + 1;
+  if (newRows > 0) {
+    raciSheet.getRange(firstNew, RACI_COL.status, newRows, 1)
+      .setBackground('#FFF9C4').setFontColor('#E65100').setFontWeight('bold');
+  }
+
+  // ── Write milestones to Milestone Staging ─────────────────────────────────
+  const milestones = extracted.timelineUpdates || [];
+  let milestoneCount = 0;
+  if (milestones.length > 0) {
+    milestoneCount = writeMilestonesToStaging_(ss, milestones, satelliteName);
+  }
+
+  // ── Log the meeting ────────────────────────────────────────────────────────
+  logMeeting_(ss, satelliteName, '', granolaText, extracted);
+
+  return (
+    '✅ Done!\n\n' +
+    '• ' + actionItems.length + ' action item(s) added to Master RACI as [DRAFT]\n' +
+    '• ' + decisions.filter(d => d.followUp).length + ' decision follow-up(s) added\n' +
+    '• ' + milestoneCount + ' milestone(s) added to Milestone Staging\n\n' +
+    'Next steps:\n' +
+    '1. Review the Master RACI tab — edit owners, delete rows you don\'t want\n' +
+    '2. Change status from [DRAFT — Validate] to "Not Started" (or any real status) to approve\n' +
+    '3. Run RACI & Trackers → Push RACI → All Satellites\n\n' +
+    'For milestones: open "📋 Milestone Staging", set the Timeline column, then run\n' +
+    '"Push Approved Milestones to Timelines".'
+  );
+}
+
+
+/**
+ * Claude prompt tuned for RACI-first extraction (no satellite routing needed).
+ */
+function extractMeetingDataForRACI_(apiKey, granolaText, satelliteName, owner) {
+  const prompt =
+    `You are extracting structured data from meeting notes for the "${satelliteName}" check-in (owner: ${owner}).\n\n` +
+    `Return ONLY valid JSON with this structure — no markdown, no extra text:\n\n` +
+    `{\n` +
+    `  "summary": "2-3 sentence executive summary",\n` +
+    `  "actionItems": [\n` +
+    `    { "task": "what needs to be done", "owner": "person's name", "dueDate": "Mon DD YYYY or empty", "priority": "P0/P1/P2/P3", "notes": "any context" }\n` +
+    `  ],\n` +
+    `  "decisions": [\n` +
+    `    { "decision": "what was decided", "owner": "who owns it", "followUp": "any follow-up action required or empty" }\n` +
+    `  ],\n` +
+    `  "timelineUpdates": [\n` +
+    `    {\n` +
+    `      "milestone": "short milestone name",\n` +
+    `      "date": "Mon DD, YYYY (best estimate, use 1st of month if only month known)",\n` +
+    `      "isTBD": true or false,\n` +
+    `      "category": "one of: Hiring / Budget / Building / Events / Curation / Communications / Academic / Other",\n` +
+    `      "owner": "who is responsible",\n` +
+    `      "changeType": "new / moved / completed / cancelled",\n` +
+    `      "details": "brief context from the meeting"\n` +
+    `    }\n` +
+    `  ]\n` +
+    `}\n\n` +
+    `Guidelines:\n` +
+    `- Capture ALL action items including implicit ones ("X will send Y by Friday")\n` +
+    `- For timelineUpdates, capture ANY dates, deadlines, scheduling changes, or milestones mentioned\n` +
+    `- Use people's first names for owner fields\n` +
+    `- If no firm date was given, set isTBD: true and estimate the month\n\n` +
+    `--- MEETING NOTES ---\n${granolaText}`;
+
+  const response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({
+      model: CONFIG.claudeModel,
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+
+  const result = JSON.parse(response.getContentText());
+  const text = result.content[0].text.trim();
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error('Could not parse Claude response: ' + text.substring(0, 200));
+  }
+}
+
+
+/**
+ * Looks up a person's function/department from CONFIG.nameToFunction.
+ * Returns empty string if not found.
+ */
+function inferFunction_(name) {
+  if (!name) return '';
+  const key = name.toLowerCase().trim();
+  for (const [n, fn] of Object.entries(CONFIG.nameToFunction)) {
+    if (key.includes(n) || n.includes(key)) return fn;
+  }
+  return '';
+}
+
+
+// ============================================================================
+// STEP 3: Push validated RACI rows → Satellites
+// ============================================================================
+
+/**
+ * Reads Master RACI rows where status ≠ DRAFT_STATUS, matches the source
+ * satellite, and appends each item to that satellite's Action Items section
+ * (only if not already present by task text — prevents duplicates).
+ *
+ * A row is considered "validated" if its Status column is anything other than
+ * DRAFT_STATUS (or blank — blank means it was deleted/skipped).
+ */
+function pushRACIToSatellites() {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const ui  = SpreadsheetApp.getUi();
+
+  const raciSheet = ss.getSheetByName(CONFIG.sheets.masterRaci);
+  if (!raciSheet) {
+    ui.alert('Master RACI not found. Run RACI & Trackers → Refresh Master RACI first.');
+    return;
+  }
+
+  const lastRow = raciSheet.getLastRow();
+  if (lastRow < 2) {
+    ui.alert('Master RACI is empty.');
+    return;
+  }
+
+  const confirm = ui.alert(
+    '📤 Push RACI → Satellites',
+    'This will push all validated RACI rows (status ≠ [DRAFT]) to their satellite trackers.\n\n' +
+    'Duplicate tasks (matched by text) will be skipped.\n\n' +
+    'Continue?',
+    ui.ButtonSet.YES_NO
+  );
+  if (confirm !== ui.Button.YES) return;
+
+  ss.toast('Pushing RACI items to satellite workbooks…', '📤 Push', -1);
+
+  const data = raciSheet.getRange(2, 1, lastRow - 1, 10).getValues();
+
+  // Group validated rows by source satellite
+  const bySatellite = {};
+  data.forEach(row => {
+    const source  = String(row[RACI_COL.source  - 1] || '').trim();
+    const task    = String(row[RACI_COL.task    - 1] || '').trim();
+    const status  = String(row[RACI_COL.status  - 1] || '').trim();
+    if (!source || !task) return;
+    if (status === DRAFT_STATUS || status === '') return;   // skip drafts and blanks
+
+    if (!bySatellite[source]) bySatellite[source] = [];
+    bySatellite[source].push({
+      task:    task,
+      owner:   String(row[RACI_COL.owner   - 1] || ''),
+      dueDate: row[RACI_COL.dueDate - 1],
+      status:  status,
+      priority: String(row[RACI_COL.priority - 1] || ''),
+      context: String(row[RACI_COL.context  - 1] || '')
+    });
+  });
+
+  if (Object.keys(bySatellite).length === 0) {
+    ui.alert('No validated rows found.\n\nChange the Status of RACI rows from "[DRAFT — Validate]" to any real status (e.g. "Not Started") to mark them as approved for pushing.');
+    return;
+  }
+
+  // Get satellite IDs
+  const satellites = getSatelliteIds_();
+  const satMap = {};
+  satellites.forEach(s => { satMap[s.name] = s.id; });
+
+  let totalPushed = 0;
+  let totalSkipped = 0;
+  const report = [];
+
+  Object.entries(bySatellite).forEach(([satName, items]) => {
+    const satId = satMap[satName];
+    if (!satId) {
+      report.push('⚠️ ' + satName + ': satellite not found in config');
+      return;
+    }
+
+    try {
+      const satellite = SpreadsheetApp.openById(satId);
+      const satSheet  = satellite.getSheetByName('Check-In');
+      if (!satSheet) {
+        report.push('⚠️ ' + satName + ': no Check-In sheet');
+        return;
+      }
+
+      const bounds = getSectionBoundaries_(satSheet);
+      if (!bounds.actions) {
+        report.push('⚠️ ' + satName + ': no Action Items section found');
+        return;
+      }
+
+      // Read existing action items to detect duplicates
+      const existing = readSectionData_(satSheet, bounds.actions);
+      const existingTasks = new Set(
+        existing.map(r => String(r[0] || '').trim().toLowerCase()).filter(Boolean)
+      );
+
+      // Build new rows list (existing + new non-duplicates)
+      const newRows = existing.filter(r => r.some(c => String(c).trim() !== ''));
+      let pushed = 0;
+      let skipped = 0;
+
+      items.forEach(item => {
+        const taskKey = item.task.toLowerCase();
+        if (existingTasks.has(taskKey)) {
+          skipped++;
+          return;
+        }
+        newRows.push([
+          item.task,
+          // Strip the "(Function)" suffix from owner if present for cleanliness
+          item.owner.replace(/\s*\([^)]+\)$/, ''),
+          item.dueDate instanceof Date ? item.dueDate : (item.dueDate || ''),
+          item.status,
+          '',           // Link column
+          'Master RACI' // Satellite Source column (col F in v2 satellite layout)
+        ]);
+        existingTasks.add(taskKey);
+        pushed++;
+      });
+
+      writeSectionData_(satSheet, bounds.actions, newRows, 10);
+      totalPushed  += pushed;
+      totalSkipped += skipped;
+      report.push('✅ ' + satName + ': ' + pushed + ' pushed, ' + skipped + ' skipped (already present)');
+
+    } catch (err) {
+      report.push('❌ ' + satName + ': ' + err.message);
+      console.error('Push failed for ' + satName + ': ' + err.message);
+    }
+  });
+
+  ss.toast('Push complete!', '✅ Done', 5);
+
+  ui.alert(
+    '📤 Push Complete',
+    totalPushed + ' item(s) pushed, ' + totalSkipped + ' skipped.\n\n' +
+    report.join('\n'),
+    ui.ButtonSet.OK
+  );
+}
+
+
+// ============================================================================
+// STEP 5: Non-destructive status sync — Satellites → Master RACI
+// ============================================================================
+
+/**
+ * For each satellite, reads its current action item statuses and updates
+ * the matching rows in Master RACI. Matching is done by task text (case-insensitive,
+ * with "[DRAFT]" / "↳ Follow-up:" prefixes stripped).
+ *
+ * DOES NOT rebuild or clear the RACI — only updates the Status and Last Updated
+ * columns of rows that already exist.
+ *
+ * New items found in satellites (not yet in RACI) are appended as new rows.
+ */
+function syncSatelliteStatusesToRACI() {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const ui  = SpreadsheetApp.getUi();
+
+  const raciSheet = ss.getSheetByName(CONFIG.sheets.masterRaci);
+  if (!raciSheet) {
+    ui.alert('Master RACI not found. Run Refresh Master RACI first.');
+    return;
+  }
+
+  ss.toast('Syncing satellite statuses to Master RACI…', '🔄 Sync', -1);
+
+  const lastRow = raciSheet.getLastRow();
+  const raciData = lastRow > 1
+    ? raciSheet.getRange(2, 1, lastRow - 1, 10).getValues()
+    : [];
+
+  // Build index: normalized task text → sheet row number (2-indexed)
+  const taskIndex = {};
+  raciData.forEach((row, i) => {
+    const raw = String(row[RACI_COL.task - 1] || '');
+    const key = normalizeTask_(raw);
+    if (key) taskIndex[key] = i + 2;  // 1-indexed sheet row
+  });
+
+  const satellites  = getSatelliteIds_();
+  const sprintInfo  = getCurrentSprintInfo_(ss);
+  const now         = new Date();
+
+  let updated   = 0;
+  let newItems  = 0;
+  const newRows = [];
+
+  satellites.forEach(sat => {
+    const checkIn = CONFIG.checkIns.find(c => c.name === sat.name || c.legacyName === sat.name);
+    if (!checkIn || checkIn.type === 'okr') return;
+
+    try {
+      const satellite = SpreadsheetApp.openById(sat.id);
+      const satSheet  = satellite.getSheetByName('Check-In');
+      if (!satSheet) return;
+
+      const bounds  = getSectionBoundaries_(satSheet);
+      const actions = bounds.actions ? readSectionData_(satSheet, bounds.actions) : [];
+
+      actions.forEach(row => {
+        const task = String(row[0] || '').trim();
+        if (!task) return;
+
+        const key    = normalizeTask_(task);
+        const status = String(row[3] || 'Not Started').trim();
+        const owner  = String(row[1] || '').trim();
+        const due    = row[2];
+
+        if (taskIndex[key]) {
+          // Found a matching row — update status + last updated only
+          const sheetRow = taskIndex[key];
+          const currentStatus = String(raciSheet.getRange(sheetRow, RACI_COL.status).getValue()).trim();
+
+          // Don't overwrite a DRAFT status — the user hasn't validated it yet
+          if (currentStatus !== DRAFT_STATUS && currentStatus !== status) {
+            raciSheet.getRange(sheetRow, RACI_COL.status).setValue(status);
+            raciSheet.getRange(sheetRow, RACI_COL.updated).setValue(now);
+
+            // Color the status cell based on value
+            colorStatusCell_(raciSheet.getRange(sheetRow, RACI_COL.status), status);
+            updated++;
+          }
+        } else {
+          // New item from satellite — append to batch
+          newRows.push([
+            sat.name,
+            task,
+            false,
+            owner,
+            due,
+            status,
+            '',
+            sprintInfo.name,
+            '← From satellite',
+            now
+          ]);
+          taskIndex[key] = -1; // mark as seen (avoid duplicates within same sync)
+          newItems++;
+        }
+      });
+
+    } catch (err) {
+      console.error('Status sync failed for ' + sat.name + ': ' + err.message);
+    }
+  });
+
+  // Append new items (rows that exist in satellites but not in RACI)
+  if (newRows.length > 0) {
+    const startRow = raciSheet.getLastRow() + 1;
+    raciSheet.getRange(startRow, 1, newRows.length, 10).setValues(newRows);
+    // Mark new satellite-sourced rows with a light blue background
+    raciSheet.getRange(startRow, 1, newRows.length, 10).setBackground('#E3F2FD');
+    newRows.forEach((_, i) => {
+      colorStatusCell_(raciSheet.getRange(startRow + i, RACI_COL.status), String(newRows[i][5]));
+    });
+  }
+
+  ss.toast(updated + ' status(es) updated, ' + newItems + ' new item(s) added', '✅ Sync Complete', 6);
+
+  ui.alert(
+    '🔄 Sync Complete',
+    updated + ' existing RACI row(s) had their status updated from satellite data.\n' +
+    newItems + ' new item(s) from satellites appended to Master RACI.\n\n' +
+    'DRAFT rows were not touched.',
+    ui.ButtonSet.OK
+  );
+}
+
+
+/**
+ * Normalizes a task string for fuzzy matching:
+ * lowercases, strips emoji prefixes, strips "[Carried Over]" / "[DRAFT]" markers.
+ */
+function normalizeTask_(raw) {
+  return raw
+    .toLowerCase()
+    .replace(/^[⏳📌📤✅🔴⚠️↳•\-\s]+/, '')
+    .replace(/^\[.*?\]\s*/, '')
+    .replace(/^(carried over|from is|draft.*validate)\s*/i, '')
+    .trim();
+}
+
+
+/**
+ * Applies background + font color to a status cell based on its value.
+ */
+function colorStatusCell_(cell, status) {
+  const s = String(status).toLowerCase();
+  if (s === 'complete' || s === 'done') {
+    cell.setBackground('#C8E6C9').setFontColor('#2E7D32');
+  } else if (s === 'in progress') {
+    cell.setBackground('#BBDEFB').setFontColor('#1565C0');
+  } else if (s === 'blocked') {
+    cell.setBackground('#FFCDD2').setFontColor('#B71C1C');
+  } else if (s === 'not started') {
+    cell.setBackground('#F5F5F5').setFontColor('#555555');
+  } else if (s === 'carried over' || s === 'pending') {
+    cell.setBackground('#FFF9C4').setFontColor('#E65100');
+  } else if (s.includes('draft')) {
+    cell.setBackground('#FFF9C4').setFontColor('#E65100').setFontWeight('bold');
+  } else {
+    cell.setBackground(null).setFontColor(null).setFontWeight('normal');
+  }
+}
+
+
+// ============================================================================
+// MILESTONE STAGING SHEET
+// ============================================================================
+
+function navToMilestoneStaging() {
+  navigateToSheet_(MILESTONE_STAGING_SHEET);
+}
+
+
+/**
+ * Creates (or verifies) the Milestone Staging sheet.
+ * Columns: Milestone | Date | Is TBD | Category | Owner | Source Meeting |
+ *          Timeline Target | Status | Notes
+ */
+function ensureMilestoneStagingSheet_(ss) {
+  let sheet = ss.getSheetByName(MILESTONE_STAGING_SHEET);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(MILESTONE_STAGING_SHEET);
+
+  const headers = [
+    'Milestone', 'Date', 'Is TBD', 'Category', 'Owner',
+    'Source Meeting', 'Timeline Target', 'Status', 'Notes'
+  ];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length)
+    .setFontWeight('bold')
+    .setBackground('#1a73e8')
+    .setFontColor('white');
+
+  // Timeline Target dropdown
+  const timelineRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['4-Week', '6-Sprint', 'Year', 'Skip'], true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange('G2:G500').setDataValidation(timelineRule);
+
+  // Status dropdown
+  const statusRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['Pending Review', 'Approved', 'Pushed', 'Skip'], true)
+    .setAllowInvalid(true)
+    .build();
+  sheet.getRange('H2:H500').setDataValidation(statusRule);
+
+  // Category dropdown
+  const catRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['Hiring', 'Budget', 'Building', 'Events', 'Curation', 'Communications', 'Academic', 'Other'], true)
+    .setAllowInvalid(true)
+    .build();
+  sheet.getRange('D2:D500').setDataValidation(catRule);
+
+  sheet.setColumnWidth(1, 320);
+  sheet.setColumnWidth(2, 120);
+  sheet.setColumnWidth(3, 65);
+  sheet.setColumnWidth(4, 120);
+  sheet.setColumnWidth(5, 120);
+  sheet.setColumnWidth(6, 160);
+  sheet.setColumnWidth(7, 110);
+  sheet.setColumnWidth(8, 120);
+  sheet.setColumnWidth(9, 280);
+  sheet.setFrozenRows(1);
+
+  return sheet;
+}
+
+
+/**
+ * Writes an array of timeline updates (from Claude) to the Milestone Staging sheet.
+ * Returns the number of rows added.
+ */
+function writeMilestonesToStaging_(ss, updates, sourceMeeting) {
+  const sheet = ensureMilestoneStagingSheet_(ss);
+  let added = 0;
+
+  updates.forEach(u => {
+    if (!u.milestone) return;
+    sheet.appendRow([
+      u.milestone,                          // A: Milestone
+      u.date || '',                         // B: Date
+      u.isTBD ? 'Yes' : 'No',              // C: Is TBD
+      u.category || 'Other',               // D: Category
+      u.owner || '',                        // E: Owner
+      sourceMeeting,                        // F: Source Meeting
+      '',                                   // G: Timeline Target (user fills this)
+      'Pending Review',                     // H: Status
+      u.details || ''                       // I: Notes / context
+    ]);
+    added++;
+  });
+
+  // Highlight new rows light yellow
+  if (added > 0) {
+    const lastRow = sheet.getLastRow();
+    sheet.getRange(lastRow - added + 1, 1, added, 9).setBackground('#FFFDE7');
+  }
+
+  return added;
+}
+
+
+// ============================================================================
+// STEP 6: Push Approved Milestones → Timelines
+// ============================================================================
+
+/**
+ * Reads Milestone Staging rows where Status = "Approved" and Timeline Target
+ * is set. Pushes each to the appropriate timeline and marks the row as "Pushed".
+ */
+function pushApprovedMilestones() {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const ui  = SpreadsheetApp.getUi();
+
+  const stagingSheet = ss.getSheetByName(MILESTONE_STAGING_SHEET);
+  if (!stagingSheet) {
+    ui.alert('Milestone Staging sheet not found.\n\nProcess some notes first using RACI & Trackers → Process Notes → RACI Draft.');
+    return;
+  }
+
+  const lastRow = stagingSheet.getLastRow();
+  if (lastRow < 2) {
+    ui.alert('No milestones in the staging sheet yet.');
+    return;
+  }
+
+  const data = stagingSheet.getRange(2, 1, lastRow - 1, 9).getValues();
+
+  // Filter to approved rows
+  const approved = data.map((row, i) => ({ row, sheetRow: i + 2 }))
+    .filter(({ row }) => String(row[7] || '').trim() === 'Approved');
+
+  if (approved.length === 0) {
+    ui.alert('No rows are marked "Approved".\n\nSet the Status column to "Approved" for milestones you want to push, and set the Timeline Target (4-Week / 6-Sprint / Year).');
+    return;
+  }
+
+  const confirm = ui.alert(
+    '🚀 Push Approved Milestones',
+    approved.length + ' approved milestone(s) will be pushed to their target timelines.\n\n' +
+    'Continue?',
+    ui.ButtonSet.YES_NO
+  );
+  if (confirm !== ui.Button.YES) return;
+
+  ss.toast('Pushing milestones to timelines…', '🚀 Push', -1);
+
+  let yearCount   = 0;
+  let sprintCount = 0;
+  let weekCount   = 0;
+
+  approved.forEach(({ row, sheetRow }) => {
+    const milestone = String(row[0] || '').trim();
+    const date      = row[1];
+    const isTBD     = String(row[2] || '').toLowerCase() === 'yes';
+    const category  = String(row[3] || 'Other').trim();
+    const owner     = String(row[4] || '').trim();
+    const target    = String(row[6] || '').trim();
+    const notes     = String(row[8] || '').trim();
+
+    if (!milestone || !target || target === 'Skip') return;
+
+    const update = {
+      milestone: milestone,
+      date:      date instanceof Date ? formatDateForClaude_(date) : String(date || ''),
+      isTBD:     isTBD,
+      category:  category,
+      owner:     owner,
+      changeType: 'new',
+      details:   notes
+    };
+
+    try {
+      if (target === 'Year') {
+        // Push to Full Year Timeline
+        const months = getFullYearMonths_();
+        const fytSheet = ss.getSheetByName(CONFIG.sheets.fullYearTimeline);
+        if (fytSheet) {
+          addMilestoneToFullYear_(fytSheet, update, getMonthIndexForDate_(date, months), months);
+          yearCount++;
+        }
+      }
+
+      if (target === '6-Sprint') {
+        // Add to Next 6 Sprints Manual Entries section
+        addMilestoneToNext6Sprints_(ss, update);
+        sprintCount++;
+      }
+
+      if (target === '4-Week') {
+        // Add to Next 4 Weeks Manual Entries section
+        addMilestoneToNext4Weeks_(ss, update);
+        weekCount++;
+      }
+
+      // Mark as Pushed
+      stagingSheet.getRange(sheetRow, 8).setValue('Pushed');
+      stagingSheet.getRange(sheetRow, 1, 1, 9).setBackground('#E8F5E9');
+
+    } catch (err) {
+      console.error('Failed to push milestone "' + milestone + '": ' + err.message);
+      stagingSheet.getRange(sheetRow, 8).setValue('Error: ' + err.message.substring(0, 50));
+    }
+  });
+
+  ss.toast('Milestones pushed!', '✅ Done', 5);
+
+  ui.alert(
+    '✅ Milestones Pushed',
+    yearCount   + ' → Full Year Timeline\n' +
+    sprintCount + ' → Next 6 Sprints\n' +
+    weekCount   + ' → Next 4 Weeks\n\n' +
+    'Pushed rows are now highlighted green in Milestone Staging.',
+    ui.ButtonSet.OK
+  );
+}
+
+
+/**
+ * Appends a milestone to the Next 6 Sprints sheet's Manual Entries section.
+ */
+function addMilestoneToNext6Sprints_(ss, update) {
+  const sheet = ss.getSheetByName(CONFIG.sheets.next6Sprints);
+  if (!sheet) return;
+
+  const lastRow = sheet.getLastRow();
+  const data    = sheet.getRange(1, 1, lastRow, 1).getValues();
+
+  // Find the Manual Entries section
+  let insertRow = -1;
+  for (let r = data.length - 1; r >= 0; r--) {
+    const val = String(data[r][0] || '').trim();
+    if (val.includes('Manual Entries')) {
+      insertRow = r + 2; // Row after the Manual Entries header
+      break;
+    }
+  }
+
+  if (insertRow < 0) {
+    // No manual entries section — just append
+    insertRow = lastRow + 1;
+  }
+
+  // Insert a row and write the milestone (Task=col1, 📊=col2, Owner=col3, Status=col4)
+  sheet.insertRowBefore(insertRow);
+  sheet.getRange(insertRow, 1).setValue((update.isTBD ? '⏳ ' : '') + update.milestone);
+  sheet.getRange(insertRow, 3).setValue(update.owner || '');
+  sheet.getRange(insertRow, 4).setValue('Not Started');
+  sheet.getRange(insertRow, 1).setFontColor(update.isTBD ? '#9C27B0' : null);
+}
+
+
+/**
+ * Appends a milestone to the Next 4 Weeks sheet's Manual Entries section.
+ */
+function addMilestoneToNext4Weeks_(ss, update) {
+  const sheet = ss.getSheetByName(CONFIG.sheets.next4Weeks);
+  if (!sheet) return;
+
+  const lastRow = sheet.getLastRow();
+  const data    = sheet.getRange(1, 1, lastRow, 1).getValues();
+
+  let insertRow = -1;
+  for (let r = data.length - 1; r >= 0; r--) {
+    const val = String(data[r][0] || '').trim();
+    if (val.includes('Manual Entries')) {
+      insertRow = r + 2;
+      break;
+    }
+  }
+  if (insertRow < 0) insertRow = lastRow + 1;
+
+  sheet.insertRowBefore(insertRow);
+  sheet.getRange(insertRow, 1).setValue((update.isTBD ? '⏳ ' : '') + update.milestone);
+  sheet.getRange(insertRow, 2).setValue(update.owner || '');
+  sheet.getRange(insertRow, 3).setValue('Manual');
+  sheet.getRange(insertRow, 4).setValue('Not Started');
+  sheet.getRange(insertRow, 1).setFontColor(update.isTBD ? '#9C27B0' : null);
+}
+
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Returns the 16-month array used by the Full Year Timeline.
+ */
+function getFullYearMonths_() {
+  return [
+    'Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026',
+    'Jul 2026', 'Aug 2026', 'Sep 2026', 'Oct 2026',
+    'Nov 2026', 'Dec 2026', 'Jan 2027', 'Feb 2027',
+    'Mar 2027', 'Apr 2027', 'May 2027', 'Jun 2027'
+  ];
+}
+
+
+/**
+ * Converts a Date or date string to the "Mon DD, YYYY" format Claude uses.
+ */
+function formatDateForClaude_(date) {
+  try {
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return String(date || '');
+    return Utilities.formatDate(d, Session.getScriptTimeZone(), 'MMM d, yyyy');
+  } catch (e) {
+    return String(date || '');
+  }
+}
+
+
+/**
+ * Given a date and the months array, returns the 0-based index into that array.
+ * Returns -1 if not found.
+ */
+function getMonthIndexForDate_(date, months) {
+  try {
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return -1;
+    const monthStr = Utilities.formatDate(d, Session.getScriptTimeZone(), 'MMM yyyy');
+    return months.indexOf(monthStr);
+  } catch (e) {
+    return -1;
+  }
 }
