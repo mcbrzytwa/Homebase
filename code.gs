@@ -6711,30 +6711,14 @@ function processNotesToRACIDraftServer(satelliteName, granolaText) {
   const decisions   = extracted.decisions || [];
   const now = new Date();
 
-  // Append action items
-  actionItems.forEach(item => {
-    const owner = item.owner || '';
-    const fn    = inferFunction_(owner);
-    raciSheet.appendRow([
-      satelliteName,                         // A: Source
-      item.task || '',                       // B: Task
-      false,                                 // C: 📊 Deck (unchecked)
-      owner + (fn ? ' (' + fn + ')' : ''),  // D: Owner + Function
-      item.dueDate || '',                    // E: Due Date
-      DRAFT_STATUS,                          // F: Status — marks as unvalidated
-      item.priority || '',                   // G: Priority
-      sprintInfo.name,                       // H: Sprint
-      '',                                    // I: Context
-      now                                    // J: Last Updated
-    ]);
-  });
+  // Build all new rows (decisions first so action items end up on top after insertion)
+  const newRowsData = [];
 
-  // Append decisions that have follow-ups
   decisions.forEach(d => {
     if (!d.followUp) return;
     const owner = d.owner || '';
     const fn    = inferFunction_(owner);
-    raciSheet.appendRow([
+    newRowsData.push([
       satelliteName,
       '↳ Follow-up: ' + d.followUp,
       false,
@@ -6748,12 +6732,31 @@ function processNotesToRACIDraftServer(satelliteName, granolaText) {
     ]);
   });
 
-  // Apply DRAFT highlight to new rows
-  const lastRow  = raciSheet.getLastRow();
-  const newRows  = actionItems.length + decisions.filter(d => d.followUp).length;
-  const firstNew = lastRow - newRows + 1;
+  actionItems.forEach(item => {
+    const owner = item.owner || '';
+    const fn    = inferFunction_(owner);
+    newRowsData.push([
+      satelliteName,                         // A: Source
+      item.task || '',                       // B: Task
+      false,                                 // C: 📊 Deck (unchecked)
+      owner + (fn ? ' (' + fn + ')' : ''),  // D: Owner + Function
+      item.dueDate || '',                    // E: Due Date
+      DRAFT_STATUS,                          // F: Status — marks as unvalidated
+      item.priority || '',                   // G: Priority
+      sprintInfo.name,                       // H: Sprint
+      '',                                    // I: Context
+      now                                    // J: Last Updated
+    ]);
+  });
+
+  // Insert new rows at row 2 (just below header), pushing existing rows down
+  const newRows = newRowsData.length;
   if (newRows > 0) {
-    raciSheet.getRange(firstNew, RACI_COL.status, newRows, 1)
+    raciSheet.insertRowsAfter(1, newRows);
+    raciSheet.getRange(2, 1, newRows, newRowsData[0].length).setValues(newRowsData);
+
+    // Apply DRAFT highlight to the newly inserted rows
+    raciSheet.getRange(2, RACI_COL.status, newRows, 1)
       .setBackground('#FFF9C4').setFontColor('#E65100').setFontWeight('bold');
   }
 
