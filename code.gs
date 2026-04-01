@@ -180,7 +180,6 @@ function onOpen() {
       .addItem('📋 View Timeline Change Log', 'navToTimelineChangeLog'))
     .addSeparator()
     .addSubMenu(ui.createMenu('📝 Meeting Notes (Granola)')
-      .addItem('📥 Process Granola Notes for Satellite', 'processGranolaNotes')
       .addItem('📋 View Meeting Log', 'navToMeetingLog')
       .addItem('🔄 Sync Meeting Log from Calendar', 'syncMeetingLogFromCalendar'))
     .addSeparator()
