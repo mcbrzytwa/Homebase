@@ -4315,6 +4315,7 @@ function addMilestoneToFullYear_(sheet, update, monthIndex, months) {
   };
 
   const targetSection = categoryMap[update.category] || '';
+  if (!targetSection) return; // Skip if category doesn't map to a section
   const data = sheet.getDataRange().getValues();
 
   // Find the section and its last item row
@@ -4346,6 +4347,11 @@ function addMilestoneToFullYear_(sheet, update, monthIndex, months) {
 
   const isTBD = update.isTBD !== false;
   const label = (isTBD ? '⏳ ' : '') + update.milestone;
+  // Apply alternating row background to the entire row
+  const rowBg = (insertRow % 2 === 0) ? '#F8F9FA' : '#FFFFFF';
+  const lastCol = sheet.getLastColumn();
+  sheet.getRange(insertRow, 1, 1, lastCol).setBackground(rowBg);
+
   sheet.getRange(insertRow, 1).setValue(label);
   if (isTBD) {
     sheet.getRange(insertRow, 1).setFontColor('#9C27B0');
@@ -4353,7 +4359,7 @@ function addMilestoneToFullYear_(sheet, update, monthIndex, months) {
 
   const marker = isTBD ? '⏳' : '🎯';
   const bgColor = isTBD ? '#F3E5F5' : '#E3F2FD';
-  sheet.getRange(insertRow, monthIndex + 2).setValue(marker)
+  sheet.getRange(insertRow, monthIndex + 4).setValue(marker)
     .setHorizontalAlignment('center').setFontSize(12).setBackground(bgColor);
 }
 
